@@ -1,0 +1,37 @@
+{
+  "entities": {
+    "songs": {
+      "title": "Songs",
+      "description": "Cifras e músicas salvas na nuvem e sincronizadas offline",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "artist": { "type": "string" },
+        "originalKey": { "type": "string" },
+        "genre": { "type": "string" },
+        "difficulty": { "type": "string" },
+        "bpm": { "type": "number" },
+        "capo": { "type": "number" },
+        "chordsText": { "type": "string" },
+        "chordsUsed": { "type": "array", "items": { "type": "string" } },
+        "cifraClubUrl": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "title", "artist", "chordsText"]
+    },
+    "profiles": {
+      "title": "User Profiles",
+      "description": "Perfil do músico, favoritos e repertórios",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "preferredInstrument": { "type": "string" },
+        "stageModeDark": { "type": "boolean" },
+        "favorites": { "type": "array", "items": { "type": "string" } },
+        "history": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "name"]
+    }
+  }
+}

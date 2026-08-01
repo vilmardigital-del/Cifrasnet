@@ -1,0 +1,6 @@
+{
+  "name": "CifraMaster - Cifras e Metrônomo para Músicos",
+  "description": "App completo de cifras para músicos com busca por artista, transposição de tom, rolagem automática, modo offline, favoritos e metrônomo integrado.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
