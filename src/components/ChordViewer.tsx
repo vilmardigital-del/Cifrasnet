@@ -72,6 +72,38 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
   const [scrollSpeed, setScrollSpeed] = useState(3); // 1 to 10
   const [fontSize, setFontSize] = useState(18); // px
 
+  // Screen Wake Lock Engine (Keeps screen awake when chord sheet is open)
+  useEffect(() => {
+    let wakeLock: any = null;
+
+    const requestWakeLock = async () => {
+      if ('wakeLock' in navigator) {
+        try {
+          wakeLock = await (navigator as any).wakeLock.request('screen');
+        } catch (err) {
+          // Wake lock request can fail if battery is low or permissions are denied
+        }
+      }
+    };
+
+    requestWakeLock();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        requestWakeLock();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (wakeLock) {
+        wakeLock.release().catch(() => {});
+      }
+    };
+  }, []);
+
   // Auto-scroll engine using requestAnimationFrame for smooth, continuous scrolling
   useEffect(() => {
     let animationFrameId: number;
