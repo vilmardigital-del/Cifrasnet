@@ -6,6 +6,7 @@ export interface ScrapedSong {
   currentKey: string;
   difficulty: string;
   genre: string;
+  recommendedBpm?: number;
   chordsText: string;
   chordsUsed: string[];
   cifraClubUrl: string;
@@ -128,7 +129,25 @@ export function parseCifraClubHtml(html: string, url: string): ScrapedSong | nul
       }
     }
 
-    // 5. Clean up the chords text
+    // 5. Extract BPM / Tempo
+    let recommendedBpm = 120;
+    const bpmMatch =
+      html.match(/data-bpm=\"(\d+)\"/i) ||
+      html.match(/id=\"cifra_bpm\"[^>]*>(\d+)</i) ||
+      html.match(/class=\"[^\"]*bpm[^\"]*\"[^>]*>(\d+)</i) ||
+      html.match(/\"bpm\":\s*(\d+)/i) ||
+      html.match(/\"tempo\":\s*(\d+)/i) ||
+      html.match(/(\d+)\s*bpm/i) ||
+      html.match(/bpm[\s:]+(\d+)/i);
+
+    if (bpmMatch && bpmMatch[1]) {
+      const parsedBpm = parseInt(bpmMatch[1], 10);
+      if (parsedBpm >= 40 && parsedBpm <= 250) {
+        recommendedBpm = parsedBpm;
+      }
+    }
+
+    // 6. Clean up the chords text
     let cleanChords = preContent
       .replace(/<\/div>/gi, '\n')
       .replace(/<\/p>/gi, '\n')
@@ -161,6 +180,7 @@ export function parseCifraClubHtml(html: string, url: string): ScrapedSong | nul
       currentKey: tom || 'C',
       difficulty: 'Médio',
       genre: 'Nacional',
+      recommendedBpm: recommendedBpm || 120,
       chordsText: cleanChords,
       chordsUsed: uniqueChords,
       cifraClubUrl: url,

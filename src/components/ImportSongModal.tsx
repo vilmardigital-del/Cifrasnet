@@ -86,6 +86,9 @@ export const ImportSongModal: React.FC<ImportSongModalProps> = ({
       setArtist(songData.artist || '');
       setKey(songData.originalKey || 'C');
       setGenre(songData.genre || 'Nacional');
+      if (songData.recommendedBpm) {
+        setBpm(songData.recommendedBpm);
+      }
       setChordsText(songData.chordsText || '');
       setCifraUrl('');
       setUrlError(null);

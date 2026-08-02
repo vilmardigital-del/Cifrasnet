@@ -70,7 +70,37 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
   // Auto-scroll states
   const [isAutoScrolling, setIsAutoScrolling] = useState(false);
   const [scrollSpeed, setScrollSpeed] = useState(3); // 1 to 10
-  const [fontSize, setFontSize] = useState(18); // px (balanced default for optimal visibility)
+  const [fontSize, setFontSize] = useState(18); // px
+
+  // Auto-scroll engine using requestAnimationFrame for smooth, continuous scrolling
+  useEffect(() => {
+    let animationFrameId: number;
+    let lastTime = performance.now();
+
+    const scrollStep = (currentTime: number) => {
+      if (!isAutoScrolling) return;
+      const deltaTime = (currentTime - lastTime) / 1000;
+      lastTime = currentTime;
+
+      // scrollSpeed (1-10) maps smoothly to pixels per second (e.g. speed 1 = 4px/s, speed 3 = 12px/s)
+      const pxPerSec = scrollSpeed * 4;
+      const distance = pxPerSec * Math.min(deltaTime, 0.1);
+      window.scrollBy(0, distance);
+
+      animationFrameId = requestAnimationFrame(scrollStep);
+    };
+
+    if (isAutoScrolling) {
+      lastTime = performance.now();
+      animationFrameId = requestAnimationFrame(scrollStep);
+    }
+
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [isAutoScrolling, scrollSpeed]);
 
   // Chord Simplify Toggle
   const [isSimplified, setIsSimplified] = useState(false);
@@ -100,25 +130,6 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
   // Extract unique chords present in transposed text
   const currentChordsUsed = extractChordsFromText(transposedText);
 
-  // Auto-scroll engine
-  useEffect(() => {
-    if (isAutoScrolling) {
-      scrollIntervalRef.current = window.setInterval(() => {
-        window.scrollBy({ top: scrollSpeed * 0.5, behavior: 'smooth' });
-      }, 50);
-    } else {
-      if (scrollIntervalRef.current) {
-        clearInterval(scrollIntervalRef.current);
-      }
-    }
-
-    return () => {
-      if (scrollIntervalRef.current) {
-        clearInterval(scrollIntervalRef.current);
-      }
-    };
-  }, [isAutoScrolling, scrollSpeed]);
-
   // Fullscreen toggle
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -145,7 +156,7 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
   };
 
   /**
-   * Helper to parse and render cifra lines with clickable, highlighted chord buttons!
+   * Helper to parse and render cifra lines with clickable chord buttons
    */
   const renderCifraContent = (text: string) => {
     const lines = text.split('\n');
@@ -249,133 +260,135 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
       stageModeDark ? 'bg-zinc-950 text-zinc-100' : 'bg-amber-50/30 text-zinc-900'
     }`}>
       
-      {/* Top Navigation Bar */}
-      <div className={`sticky top-0 z-30 border-b backdrop-blur-md px-4 py-3 ${
-        stageModeDark ? 'bg-zinc-950/90 border-zinc-800' : 'bg-white/90 border-zinc-200 shadow-xs'
-      }`}>
-        <div className="max-w-4xl mx-auto flex items-center justify-between gap-2">
-          
-          <button
-            onClick={onBack}
-            className="p-2 rounded-xl border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1 text-xs font-bold"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span className="hidden sm:inline">Voltar</span>
-          </button>
-
-          {/* Title & Artist */}
-          <div className="text-center truncate flex-1 px-2">
-            <h1 className="font-extrabold text-base sm:text-lg tracking-tight truncate">{song.title}</h1>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 font-semibold truncate">{song.artist}</p>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-1.5">
+      {/* Top Navigation Bar (Hidden during auto-scroll) */}
+      {!isAutoScrolling && (
+        <div className={`sticky top-0 z-30 border-b backdrop-blur-md px-4 py-3 animate-in fade-in duration-200 ${
+          stageModeDark ? 'bg-zinc-950/90 border-zinc-800' : 'bg-white/90 border-zinc-200 shadow-xs'
+        }`}>
+          <div className="max-w-4xl mx-auto flex items-center justify-between gap-2">
+            
             <button
-              onClick={(e) => onToggleFavorite(song.id, e)}
-              className={`p-2 rounded-xl border transition-colors ${
-                isFavorite
-                  ? 'border-rose-500/30 bg-rose-500/10 text-rose-500'
-                  : 'border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
-              }`}
-              title={isFavorite ? 'Remover dos favoritos' : 'Favoritar'}
+              onClick={onBack}
+              className="p-2 rounded-xl border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1 text-xs font-bold"
             >
-              <Heart className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
+              <ArrowLeft className="w-4 h-4" />
+              <span className="hidden sm:inline">Voltar</span>
             </button>
 
-            {/* Setlist dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setShowSetlistDropdown(!showSetlistDropdown)}
-                className="p-2 rounded-xl border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                title="Adicionar ao Repertório"
-              >
-                <BookmarkPlus className="w-4 h-4" />
-              </button>
-
-              {showSetlistDropdown && (
-                <div className={`absolute right-0 mt-2 w-56 rounded-2xl p-2 shadow-2xl border z-50 ${
-                  stageModeDark ? 'bg-zinc-900 border-zinc-800 text-zinc-100' : 'bg-white border-zinc-200 text-zinc-900'
-                }`}>
-                  <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider px-2 py-1">Salvar em Repertório</p>
-                  {profile.setlists.map((sl) => (
-                    <button
-                      key={sl.id}
-                      onClick={() => handleAddToSetlist(sl.id)}
-                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold hover:bg-amber-500/10 hover:text-amber-500 transition-colors flex items-center justify-between"
-                    >
-                      <span className="truncate">{sl.name}</span>
-                      {sl.songIds.includes(song.id) && <Check className="w-3.5 h-3.5 text-amber-500" />}
-                    </button>
-                  ))}
-                </div>
-              )}
+            {/* Title & Artist */}
+            <div className="text-center truncate flex-1 px-2">
+              <h1 className="font-extrabold text-base sm:text-lg tracking-tight truncate">{song.title}</h1>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 font-semibold truncate">{song.artist}</p>
             </div>
 
-            {/* Options Panel Toggle Button */}
-            <button
-              onClick={() => setShowOptionsBar(!showOptionsBar)}
-              className={`px-3 py-2 rounded-xl border font-bold text-xs flex items-center gap-1.5 transition-all ${
-                showOptionsBar
-                  ? 'bg-amber-500 border-amber-500 text-zinc-950 shadow-sm'
-                  : 'border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-              }`}
-              title={showOptionsBar ? 'Ocultar menu de opções' : 'Exibir menu de opções e tom'}
-            >
-              <SlidersHorizontal className="w-4 h-4" />
-              <span className="hidden sm:inline">{showOptionsBar ? 'Ocultar Opções' : 'Opções / Tom'}</span>
-            </button>
+            {/* Actions */}
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={(e) => onToggleFavorite(song.id, e)}
+                className={`p-2 rounded-xl border transition-colors ${
+                  isFavorite
+                    ? 'border-rose-500/30 bg-rose-500/10 text-rose-500'
+                    : 'border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
+                }`}
+                title={isFavorite ? 'Remover dos favoritos' : 'Favoritar'}
+              >
+                <Heart className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
+              </button>
 
-            {/* Metronome Toggle Button */}
-            <button
-              onClick={() => setShowMetronome(!showMetronome)}
-              className={`p-2 rounded-xl border transition-colors ${
-                showMetronome
-                  ? 'bg-amber-500 border-amber-500 text-zinc-950 font-bold'
-                  : 'border-amber-500/30 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'
-              }`}
-              title="Abrir Metrônomo Integrado"
-            >
-              <Activity className="w-4 h-4" />
-            </button>
+              {/* Setlist dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowSetlistDropdown(!showSetlistDropdown)}
+                  className="p-2 rounded-xl border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  title="Adicionar ao Repertório"
+                >
+                  <BookmarkPlus className="w-4 h-4" />
+                </button>
 
-            {/* Stage Mode Toggle */}
-            <button
-              onClick={onToggleStageMode}
-              className="p-2 rounded-xl border border-zinc-200 dark:border-zinc-800 text-amber-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-              title={stageModeDark ? 'Modo Claro' : 'Modo Palco Escuro'}
-            >
-              {stageModeDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </button>
+                {showSetlistDropdown && (
+                  <div className={`absolute right-0 mt-2 w-56 rounded-2xl p-2 shadow-2xl border z-50 ${
+                    stageModeDark ? 'bg-zinc-900 border-zinc-800 text-zinc-100' : 'bg-white border-zinc-200 text-zinc-900'
+                  }`}>
+                    <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider px-2 py-1">Salvar em Repertório</p>
+                    {profile.setlists.map((sl) => (
+                      <button
+                        key={sl.id}
+                        onClick={() => handleAddToSetlist(sl.id)}
+                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold hover:bg-amber-500/10 hover:text-amber-500 transition-colors flex items-center justify-between"
+                      >
+                        <span className="truncate">{sl.name}</span>
+                        {sl.songIds.includes(song.id) && <Check className="w-3.5 h-3.5 text-amber-500" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-            {/* Fullscreen Button */}
-            <button
-              onClick={toggleFullscreen}
-              className="p-2 rounded-xl border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-              title="Tela Cheia"
-            >
-              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-            </button>
+              {/* Options Panel Toggle Button */}
+              <button
+                onClick={() => setShowOptionsBar(!showOptionsBar)}
+                className={`px-3 py-2 rounded-xl border font-bold text-xs flex items-center gap-1.5 transition-all ${
+                  showOptionsBar
+                    ? 'bg-amber-500 border-amber-500 text-zinc-950 shadow-sm'
+                    : 'border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                }`}
+                title={showOptionsBar ? 'Ocultar menu de opções' : 'Exibir menu de opções e tom'}
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+                <span className="hidden sm:inline">{showOptionsBar ? 'Ocultar Opções' : 'Opções / Tom'}</span>
+              </button>
 
-            {/* Delete Song Button */}
-            <button
-              onClick={() => onDeleteSong(song)}
-              className="p-2 rounded-xl border border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
-              title="Apagar cifra"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+              {/* Metronome Toggle Button */}
+              <button
+                onClick={() => setShowMetronome(!showMetronome)}
+                className={`p-2 rounded-xl border transition-colors ${
+                  showMetronome
+                    ? 'bg-amber-500 border-amber-500 text-zinc-950 font-bold'
+                    : 'border-amber-500/30 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'
+                }`}
+                title="Abrir Metrônomo Integrado"
+              >
+                <Activity className="w-4 h-4" />
+              </button>
+
+              {/* Stage Mode Toggle */}
+              <button
+                onClick={onToggleStageMode}
+                className="p-2 rounded-xl border border-zinc-200 dark:border-zinc-800 text-amber-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                title={stageModeDark ? 'Modo Claro' : 'Modo Palco Escuro'}
+              >
+                {stageModeDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </button>
+
+              {/* Fullscreen Button */}
+              <button
+                onClick={toggleFullscreen}
+                className="p-2 rounded-xl border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                title="Tela Cheia"
+              >
+                {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              </button>
+
+              {/* Delete Song Button */}
+              <button
+                onClick={() => onDeleteSong(song)}
+                className="p-2 rounded-xl border border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                title="Apagar cifra"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+
           </div>
-
         </div>
-      </div>
+      )}
 
       {/* Main Chord Workspace */}
       <div className="max-w-4xl mx-auto px-4 pt-6" ref={scrollContainerRef}>
         
         {/* Controls & Key Bar */}
-        {showOptionsBar ? (
-          <div className={`p-4 rounded-3xl border mb-6 shadow-sm animate-in fade-in duration-200 ${
+        {showOptionsBar && !isAutoScrolling ? (
+          <div className={`p-4 rounded-3xl border mb-6 shadow-sm animate-in fade-in duration-200 space-y-4 ${
             stageModeDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-zinc-200/80'
           }`}>
             <div className="flex flex-wrap items-center justify-between gap-4">
@@ -460,7 +473,7 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
             </div>
 
             {/* Used Chords Bar */}
-            <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center gap-2 overflow-x-auto no-scrollbar">
+            <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center gap-2 overflow-x-auto no-scrollbar">
               <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider shrink-0">Acordes:</span>
               {currentChordsUsed.map((chord) => (
                 <button
@@ -473,36 +486,34 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
               ))}
             </div>
           </div>
-        ) : (
+        ) : (song.capo || currentChordsUsed.length > 0) ? (
           /* Compact Minimal Header when Options Bar is hidden */
-          (song.capo || currentChordsUsed.length > 0) ? (
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 px-1">
-              <div className="flex items-center gap-2 text-xs font-bold">
-                {song.capo && (
-                  <span className="px-2.5 py-1 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
-                    Capo {song.capo}ª
-                  </span>
-                )}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 px-1">
+            <div className="flex items-center gap-2 text-xs font-bold">
+              {song.capo && (
+                <span className="px-2.5 py-1 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                  Capo {song.capo}ª
+                </span>
+              )}
 
-                {/* Compact Chord Badges */}
-                <div className="hidden md:flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                  {currentChordsUsed.slice(0, 6).map((chord) => (
-                    <button
-                      key={chord}
-                      onClick={() => setSelectedChordForDiagram(chord)}
-                      className="px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:text-amber-500 font-mono text-[11px] font-bold shrink-0"
-                    >
-                      {chord}
-                    </button>
-                  ))}
-                  {currentChordsUsed.length > 6 && (
-                    <span className="text-[10px] text-zinc-400">+{currentChordsUsed.length - 6}</span>
-                  )}
-                </div>
+              {/* Compact Chord Badges */}
+              <div className="hidden md:flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                {currentChordsUsed.slice(0, 6).map((chord) => (
+                  <button
+                    key={chord}
+                    onClick={() => setSelectedChordForDiagram(chord)}
+                    className="px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:text-amber-500 font-mono text-[11px] font-bold shrink-0"
+                  >
+                    {chord}
+                  </button>
+                ))}
+                {currentChordsUsed.length > 6 && (
+                  <span className="text-[10px] text-zinc-400">+{currentChordsUsed.length - 6}</span>
+                )}
               </div>
             </div>
-          ) : null
-        )}
+          </div>
+        ) : null}
 
         {/* Cifra Sheet Body */}
         <div 
@@ -518,33 +529,65 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
 
       </div>
 
-      {/* Floating Auto-Scroll & View Controls Bar */}
+      {/* Floating Auto-Scroll Controls / Hidden Header & Options when Auto-Scrolling */}
       {isAutoScrolling ? (
-        /* Floating Minimal Pause Button when Auto-Scrolling (Hides bottom bar for clean view) */
-        <button
-          onClick={() => setIsAutoScrolling(false)}
-          className="fixed bottom-3 right-3 sm:right-6 z-50 px-3 py-1.5 rounded-full bg-rose-500/90 hover:bg-rose-600 text-white shadow-lg backdrop-blur-md font-bold text-xs flex items-center gap-1.5 animate-pulse transition-all active:scale-95 border border-rose-400/30"
-          title="Clique para pausar a rolagem e reexibir o menu"
-        >
-          <Pause className="w-3.5 h-3.5 fill-current" />
-          <span>Pausar Rolagem</span>
-        </button>
+        <div className="fixed bottom-6 right-6 z-50 animate-in fade-in zoom-in-95 duration-200">
+          <div className={`px-3.5 py-2 rounded-full font-bold text-xs shadow-2xl backdrop-blur-md flex items-center gap-2.5 border transition-all ${
+            stageModeDark
+              ? 'bg-zinc-950/50 hover:bg-zinc-950/80 border-white/20 text-zinc-100'
+              : 'bg-white/60 hover:bg-white/90 border-zinc-900/20 text-zinc-900'
+          }`}>
+            <button
+              onClick={() => setIsAutoScrolling(false)}
+              className="flex items-center gap-1.5 hover:text-rose-500 transition-colors cursor-pointer"
+              title="Pausar Rolagem Automática"
+            >
+              <Pause className="w-4 h-4 fill-rose-500 text-rose-500 shrink-0" />
+              <span className="font-bold text-xs whitespace-nowrap">Pausar Rolagem</span>
+            </button>
+
+            {/* Speed adjustment during scroll */}
+            <div className="flex items-center gap-1 border-l border-current/20 pl-2">
+              <button
+                onClick={() => setScrollSpeed((prev) => Math.max(1, prev - 1))}
+                className="w-5 h-5 rounded-full hover:bg-current/10 flex items-center justify-center font-extrabold text-[11px] transition-colors"
+                title="Diminuir Velocidade"
+              >
+                -
+              </button>
+
+              <span className="text-[11px] font-mono font-extrabold text-amber-500 min-w-[16px] text-center">
+                {scrollSpeed}
+              </span>
+
+              <button
+                onClick={() => setScrollSpeed((prev) => Math.min(10, prev + 1))}
+                className="w-5 h-5 rounded-full hover:bg-current/10 flex items-center justify-center font-extrabold text-[11px] transition-colors"
+                title="Aumentar Velocidade"
+              >
+                +
+              </button>
+            </div>
+          </div>
+        </div>
       ) : (
-        /* Compact Floating Controls Bar (Bottom Sticky) */
         <div className={`fixed bottom-3 left-1/2 -translate-x-1/2 z-40 px-3 py-1.5 rounded-xl border shadow-lg backdrop-blur-md flex items-center gap-2.5 transition-all max-w-md ${
           stageModeDark ? 'bg-zinc-900/95 border-zinc-800 text-zinc-100' : 'bg-white/95 border-zinc-200 text-zinc-900'
         }`}>
-          {/* Play AutoScroll */}
+          {/* Play / Pause AutoScroll */}
           <button
-            onClick={() => setIsAutoScrolling(true)}
-            className="px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 bg-amber-500 text-zinc-950 hover:bg-amber-400 shadow-xs transition-all shrink-0"
+            onClick={() => {
+              setIsAutoScrolling(true);
+              setShowOptionsBar(false);
+            }}
+            className="px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition-all shrink-0 bg-amber-500 text-zinc-950 hover:bg-amber-400 shadow-xs"
             title="Iniciar Rolagem Automática"
           >
             <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
             <span>Rolagem</span>
           </button>
 
-          {/* Scroll Speed Adjust (+ and -) */}
+          {/* Scroll Speed Adjust */}
           <div className="flex items-center gap-0.5 border-l border-zinc-200 dark:border-zinc-800 pl-1.5">
             <span className="text-[10px] font-bold text-zinc-400 uppercase mr-1">Vel:</span>
             <button

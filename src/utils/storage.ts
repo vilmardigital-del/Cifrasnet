@@ -63,14 +63,106 @@ export function loadUserProfile(): UserProfile {
   }
 }
 
-export function saveUserProfile(profile: UserProfile, syncCloud: boolean = true): void {
+export function trimStorageQuota(): void {
   try {
-    localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
-    if (syncCloud) {
+    const raw = localStorage.getItem(OFFLINE_SONGS_KEY);
+    if (!raw) return;
+    const cached: Song[] = JSON.parse(raw);
+
+    // Keep custom songs and songs that are not default popular songs
+    const filtered = cached.filter((s) => {
+      if (s.id.startsWith('custom_')) return true;
+      const defaultPop = POPULAR_SONGS.find((p) => p.id === s.id);
+      if (!defaultPop) return true;
+      return s.chordsText !== defaultPop.chordsText || JSON.stringify(s.chordsUsed) !== JSON.stringify(defaultPop.chordsUsed);
+    });
+
+    const customOnly = filtered.filter((s) => s.id.startsWith('custom_'));
+    const others = filtered.filter((s) => !s.id.startsWith('custom_')).slice(-5);
+    const trimmed = [...customOnly, ...others];
+
+    localStorage.setItem(OFFLINE_SONGS_KEY, JSON.stringify(trimmed));
+  } catch (e) {
+    console.warn('Failed to trim offline cache:', e);
+  }
+}
+
+export function saveUserProfile(profile: UserProfile, syncCloud: boolean = true): void {
+  if (syncCloud) {
+    try {
       syncProfileToCloud(profile);
+    } catch (err) {
+      console.warn('Cloud profile sync warning:', err);
+    }
+  }
+
+  const trySetItem = (key: string, data: any): boolean => {
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  // 1. Direct save attempt
+  if (trySetItem(PROFILE_STORAGE_KEY, profile)) {
+    return;
+  }
+
+  console.warn('LocalStorage quota exceeded for profile. Trimming cache...');
+
+  // 2. Trim offline songs cache first
+  trimStorageQuota();
+  if (trySetItem(PROFILE_STORAGE_KEY, profile)) {
+    return;
+  }
+
+  // 3. Try slim profile (truncating oversized custom song text in profile payload)
+  const slimCustom = (profile.customCreatedSongs || []).map((s) => ({
+    ...s,
+    chordsText: s.chordsText && s.chordsText.length > 1000 ? s.chordsText.slice(0, 1000) + '\n...' : s.chordsText,
+  }));
+  const slimProfile: UserProfile = {
+    ...profile,
+    customCreatedSongs: slimCustom,
+    history: (profile.history || []).slice(0, 10),
+  };
+
+  if (trySetItem(PROFILE_STORAGE_KEY, slimProfile)) {
+    return;
+  }
+
+  // 4. Aggressively clear cached songs except custom ones
+  try {
+    const raw = localStorage.getItem(OFFLINE_SONGS_KEY);
+    if (raw) {
+      const cached: Song[] = JSON.parse(raw);
+      const customOnly = cached.filter((s) => s.id.startsWith('custom_'));
+      localStorage.setItem(OFFLINE_SONGS_KEY, JSON.stringify(customOnly));
     }
   } catch (e) {
-    console.error('Error saving profile:', e);
+    try {
+      localStorage.removeItem(OFFLINE_SONGS_KEY);
+    } catch (_) {}
+  }
+
+  if (trySetItem(PROFILE_STORAGE_KEY, slimProfile)) {
+    return;
+  }
+
+  // 5. Emergency minimal profile payload
+  const minimalProfile: UserProfile = {
+    ...profile,
+    customCreatedSongs: (profile.customCreatedSongs || []).map((s) => ({
+      ...s,
+      chordsText: s.chordsText ? s.chordsText.slice(0, 200) : '',
+    })),
+    history: (profile.history || []).slice(0, 5),
+  };
+
+  if (!trySetItem(PROFILE_STORAGE_KEY, minimalProfile)) {
+    console.warn('Could not save profile to localStorage even with minimal payload.');
   }
 }
 
@@ -123,6 +215,19 @@ export function loadCachedSongs(): Song[] {
 
 export function saveCachedSong(song: Song, syncCloud: boolean = true): void {
   try {
+    // If it's an unmodified default popular song, no need to duplicate in localStorage
+    const defaultPop = POPULAR_SONGS.find((p) => p.id === song.id);
+    if (
+      defaultPop &&
+      defaultPop.chordsText === song.chordsText &&
+      JSON.stringify(defaultPop.chordsUsed) === JSON.stringify(song.chordsUsed)
+    ) {
+      if (syncCloud) {
+        syncSongToCloud(song);
+      }
+      return;
+    }
+
     const raw = localStorage.getItem(OFFLINE_SONGS_KEY);
     const cached: Song[] = raw ? JSON.parse(raw) : [];
     const existingIdx = cached.findIndex((s) => s.id === song.id);
@@ -134,7 +239,17 @@ export function saveCachedSong(song: Song, syncCloud: boolean = true): void {
       cached.push(updated);
     }
 
-    localStorage.setItem(OFFLINE_SONGS_KEY, JSON.stringify(cached));
+    try {
+      localStorage.setItem(OFFLINE_SONGS_KEY, JSON.stringify(cached));
+    } catch (setItemErr) {
+      console.warn('localStorage quota reached while saving song. Trimming offline cache...', setItemErr);
+      trimStorageQuota();
+      try {
+        localStorage.setItem(OFFLINE_SONGS_KEY, JSON.stringify(cached.slice(-10)));
+      } catch (innerErr) {
+        console.warn('Could not write to localStorage even after trimming:', innerErr);
+      }
+    }
 
     if (syncCloud) {
       syncSongToCloud(updated);
