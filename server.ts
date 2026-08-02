@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
+import { parseCifraClubHtml } from './src/utils/cifraClubScraper';
 
 dotenv.config();
 
@@ -29,84 +30,18 @@ const getAiClient = () => {
   });
 };
 
-function slugify(text: string): string {
-  if (!text) return '';
-  return text
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s\-]/g, '')
-    .trim()
-    .replace(/[\s\_]+/g, '-');
-}
-
 async function scrapeCifraClubUrl(url: string) {
   try {
     const res = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
       }
     });
-    if (res.status !== 200) return null;
+    if (!res.ok) return null;
     const html = await res.text();
-
-    const preMatch = html.match(/<pre[^>]*data-chord-content=\"true\"[^>]*>([\s\S]*?)<\/pre>/i);
-    if (!preMatch) return null;
-
-    let title = 'Música Sem Título';
-    let artist = 'Artista Desconhecido';
-
-    const titleTagMatch = html.match(/<title>(.*?)<\/title>/i);
-    if (titleTagMatch) {
-      const cleanTitle = titleTagMatch[1]
-        .replace(/&amp;/g, '&')
-        .replace(/&#39;/g, "'")
-        .replace(/&quot;/g, '"');
-      const parts = cleanTitle.split(' - ');
-      if (parts.length >= 2) {
-        title = parts[0].trim();
-        artist = parts[1].trim();
-      }
-    }
-
-    const chordNames = [...html.matchAll(/data-chord-name=\"([^\"]+)\"/gi)].map((m) => m[1]);
-    const uniqueChords = [...new Set(chordNames)];
-
-    let tom = 'C';
-    const tomIdx = html.indexOf('Diminuir tom');
-    if (tomIdx !== -1) {
-      const tomSnippet = html.slice(tomIdx, tomIdx + 500);
-      const tomP = tomSnippet.match(/<p[^>]*>([A-G][b#]?[m]?.*?)<\/p>/i);
-      if (tomP) tom = tomP[1].trim();
-    }
-
-    let pre = preMatch[1];
-    pre = pre
-      .replace(/<\/div>/gi, '\n')
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<b[^>]*data-chord-name=\"([^\"]+)\"[^>]*>[\s\S]*?<\/b>/gi, '$1')
-      .replace(/<[^>]+>/g, '')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&#39;/g, "'")
-      .replace(/&quot;/g, '"');
-
-    return {
-      id: 'cifraclub_' + slugify(artist) + '_' + slugify(title),
-      title,
-      artist,
-      originalKey: tom,
-      currentKey: tom,
-      difficulty: 'Médio',
-      genre: 'Nacional',
-      chordsText: pre.trim(),
-      chordsUsed: uniqueChords,
-      cifraClubUrl: url,
-      source: 'Cifra Club (Oficial)',
-    };
+    return parseCifraClubHtml(html, url);
   } catch (e) {
     console.error('Scrape Cifra Club Error:', e);
     return null;

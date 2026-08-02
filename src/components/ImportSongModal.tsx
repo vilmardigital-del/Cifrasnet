@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Plus, FileText, Check, Globe, Loader2, ExternalLink } from 'lucide-react';
 import { Song, Difficulty } from '../types';
 import { extractChordsFromText } from '../utils/chordTransposer';
+import { parseCifraClubHtml } from '../utils/cifraClubScraper';
 
 interface ImportSongModalProps {
   onSaveSong: (song: Song) => void;
@@ -28,35 +29,71 @@ export const ImportSongModal: React.FC<ImportSongModalProps> = ({
 
   const handleFetchCifraUrl = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!cifraUrl.trim()) return;
+    let targetUrl = cifraUrl.trim();
+    if (!targetUrl) return;
+
+    if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+      targetUrl = 'https://' + targetUrl;
+    }
+
+    if (!targetUrl.includes('cifraclub.com.br')) {
+      setUrlError('Apenas links do Cifra Club são suportados (ex: https://www.cifraclub.com.br/artista/musica/).');
+      return;
+    }
 
     setIsFetchingUrl(true);
     setUrlError(null);
 
+    let songData: any = null;
+
+    // 1. Primary Attempt: Server / Serverless API
     try {
       const res = await fetch('/api/search-chords', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: cifraUrl }),
+        body: JSON.stringify({ url: targetUrl }),
       });
 
-      const data = await res.json();
-
-      if (data.success && data.song) {
-        setTitle(data.song.title || '');
-        setArtist(data.song.artist || '');
-        setKey(data.song.originalKey || 'C');
-        setGenre(data.song.genre || 'Nacional');
-        setChordsText(data.song.chordsText || '');
-        setCifraUrl('');
-      } else {
-        setUrlError(data.error || 'Não foi possível ler a cifra deste link do Cifra Club.');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.song) {
+          songData = data.song;
+        }
       }
     } catch (err) {
-      setUrlError('Erro de conexão ao carregar o link.');
-    } finally {
-      setIsFetchingUrl(false);
+      console.warn('API /api/search-chords failed, trying client fallback...', err);
     }
+
+    // 2. Secondary Attempt: Client-side CORS Proxy Fallback
+    if (!songData) {
+      try {
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+        const proxyRes = await fetch(proxyUrl);
+        if (proxyRes.ok) {
+          const html = await proxyRes.text();
+          const scraped = parseCifraClubHtml(html, targetUrl);
+          if (scraped) {
+            songData = scraped;
+          }
+        }
+      } catch (proxyErr) {
+        console.warn('Client proxy fallback failed:', proxyErr);
+      }
+    }
+
+    if (songData) {
+      setTitle(songData.title || '');
+      setArtist(songData.artist || '');
+      setKey(songData.originalKey || 'C');
+      setGenre(songData.genre || 'Nacional');
+      setChordsText(songData.chordsText || '');
+      setCifraUrl('');
+      setUrlError(null);
+    } else {
+      setUrlError('Não foi possível extrair a cifra desse link. Verifique se o link está correto ou tente colar o texto da cifra manualmente abaixo.');
+    }
+
+    setIsFetchingUrl(false);
   };
 
   const handleSubmit = (e: React.FormEvent) => {

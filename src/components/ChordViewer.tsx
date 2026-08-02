@@ -70,7 +70,7 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
   // Auto-scroll states
   const [isAutoScrolling, setIsAutoScrolling] = useState(false);
   const [scrollSpeed, setScrollSpeed] = useState(3); // 1 to 10
-  const [fontSize, setFontSize] = useState(20); // px (larger default for better visualization)
+  const [fontSize, setFontSize] = useState(18); // px (balanced default for optimal visibility)
 
   // Chord Simplify Toggle
   const [isSimplified, setIsSimplified] = useState(false);
@@ -229,7 +229,7 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
         }
 
         return (
-          <div key={lineIdx} className="font-mono font-bold text-amber-500 whitespace-pre leading-snug my-0.5">
+          <div key={lineIdx} className="font-mono font-bold text-amber-500 whitespace-pre-wrap break-words leading-snug my-0.5">
             {elements}
           </div>
         );
@@ -237,7 +237,7 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
 
       // Regular Lyric Line
       return (
-        <div key={lineIdx} className="font-sans leading-relaxed whitespace-pre-wrap my-0.5">
+        <div key={lineIdx} className="font-sans leading-relaxed whitespace-pre-wrap break-words my-0.5">
           {line}
         </div>
       );
@@ -507,7 +507,7 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
         {/* Cifra Sheet Body */}
         <div 
           style={{ fontSize: `${fontSize}px` }}
-          className={`p-6 sm:p-8 rounded-3xl border shadow-md font-mono transition-all ${
+          className={`p-4 sm:p-8 rounded-2xl sm:rounded-3xl border shadow-md font-mono transition-all overflow-x-auto break-words max-w-full ${
             stageModeDark 
               ? 'bg-zinc-900 border-zinc-800 text-zinc-100 shadow-amber-500/5' 
               : 'bg-white border-zinc-200 text-zinc-900'
