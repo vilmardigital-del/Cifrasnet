@@ -11,7 +11,7 @@ const CHORD_REGEX = /\b([A-G][b#]?)((?:m|maj|min|dim|aug|sus[24]?|[0-9]{1,2}|add
  * Transposes a single note by given semitone offset
  */
 export function transposeNote(note: string, semitones: number, preferFlats = false): string {
-  if (!note) return note;
+  if (!note) return 'C';
 
   // Find index in sharp chromatic or flat chromatic
   let idx = CHROMATIC_SHARPS.indexOf(note);
@@ -55,7 +55,8 @@ export function transposeChord(chordName: string, semitones: number, preferFlats
  * Handles both inline bracket notation [C#m7] and plain chord lines above lyrics!
  */
 export function transposeCifraText(text: string, semitones: number, preferFlats = false): string {
-  if (!text || semitones === 0) return text;
+  if (!text) return '';
+  if (semitones === 0) return text;
 
   // First, transpose bracketed chords like [C], [Am7/G]
   let result = text.replace(/\[([A-G][b#]?[^\]]*)\]/g, (_, chord) => {
@@ -202,13 +203,14 @@ export function isBarreChord(chordName: string): boolean {
  * Calculates tone without barre chords ("Tom Sem Pestana") for easy playing
  */
 export function getEasyNoBarreKey(currentKey: string): { suggestedKey: string; offset: number } {
+  const safeKey = currentKey || 'C';
   const easyKeys = ['C', 'G', 'D', 'Am', 'Em'];
   let bestKey = 'C';
   let minOffset = 0;
 
   // Key offsets relative to current
-  const root = currentKey.replace(/m$/, '');
-  const isMinor = currentKey.endsWith('m');
+  const root = safeKey.replace(/m$/, '');
+  const isMinor = safeKey.endsWith('m');
 
   const idx = CHROMATIC_SHARPS.indexOf(root);
   if (idx === -1) return { suggestedKey: isMinor ? 'Am' : 'C', offset: 0 };

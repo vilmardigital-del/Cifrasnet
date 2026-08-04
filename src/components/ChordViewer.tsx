@@ -72,14 +72,32 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
   const [scrollSpeed, setScrollSpeed] = useState(3); // 1 to 10
   const [fontSize, setFontSize] = useState(18); // px
 
+  // Always scroll to top when opening a cifra / song changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as any });
+  }, [song?.id]);
+
+  // When starting auto scroll, also scroll to top so the song starts from the beginning
+  useEffect(() => {
+    if (isAutoScrolling) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [isAutoScrolling]);
+
   // Screen Wake Lock Engine (Keeps screen awake when chord sheet is open)
   useEffect(() => {
-    let wakeLock: any = null;
+    let isMounted = true;
+    let wakeLockSentinel: any = null;
 
     const requestWakeLock = async () => {
-      if ('wakeLock' in navigator) {
+      if ('wakeLock' in navigator && (navigator as any).wakeLock?.request) {
         try {
-          wakeLock = await (navigator as any).wakeLock.request('screen');
+          const lock = await (navigator as any).wakeLock.request('screen');
+          if (isMounted) {
+            wakeLockSentinel = lock;
+          } else if (lock && typeof lock.release === 'function') {
+            lock.release().catch(() => {});
+          }
         } catch (err) {
           // Wake lock request can fail if battery is low or permissions are denied
         }
@@ -97,9 +115,10 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
+      isMounted = false;
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (wakeLock) {
-        wakeLock.release().catch(() => {});
+      if (wakeLockSentinel && typeof wakeLockSentinel.release === 'function') {
+        wakeLockSentinel.release().catch(() => {});
       }
     };
   }, []);
@@ -154,13 +173,16 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
   const scrollIntervalRef = useRef<number | null>(null);
 
   // Calculate current key based on semitones offset
-  const currentKey = transposeNote(song.originalKey, semitones);
+  const safeOriginalKey = song?.originalKey || 'C';
+  const safeChordsText = song?.chordsText || '';
+
+  const currentKey = transposeNote(safeOriginalKey, semitones) || safeOriginalKey;
 
   // Transposed text
-  const transposedText = transposeCifraText(song.chordsText, semitones);
+  const transposedText = transposeCifraText(safeChordsText, semitones) || safeChordsText;
 
   // Extract unique chords present in transposed text
-  const currentChordsUsed = extractChordsFromText(transposedText);
+  const currentChordsUsed = extractChordsFromText(transposedText) || [];
 
   // Fullscreen toggle
   const toggleFullscreen = () => {
@@ -191,7 +213,8 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
    * Helper to parse and render cifra lines with clickable chord buttons
    */
   const renderCifraContent = (text: string) => {
-    const lines = text.split('\n');
+    const safeText = text || '';
+    const lines = safeText.split('\n');
 
     return lines.map((line, lineIdx) => {
       // Section Headers like [Intro], [Refrão], [Primeira Parte]
@@ -264,6 +287,9 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
             </button>
           );
 
+          if (regex.lastIndex === lastIdx) {
+            regex.lastIndex++;
+          }
           lastIdx = regex.lastIndex;
         }
 
@@ -342,14 +368,14 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
                     stageModeDark ? 'bg-zinc-900 border-zinc-800 text-zinc-100' : 'bg-white border-zinc-200 text-zinc-900'
                   }`}>
                     <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider px-2 py-1">Salvar em Repertório</p>
-                    {profile.setlists.map((sl) => (
+                    {(profile?.setlists || []).map((sl) => (
                       <button
                         key={sl.id}
                         onClick={() => handleAddToSetlist(sl.id)}
                         className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold hover:bg-amber-500/10 hover:text-amber-500 transition-colors flex items-center justify-between"
                       >
                         <span className="truncate">{sl.name}</span>
-                        {sl.songIds.includes(song.id) && <Check className="w-3.5 h-3.5 text-amber-500" />}
+                        {sl.songIds?.includes(song.id) && <Check className="w-3.5 h-3.5 text-amber-500" />}
                       </button>
                     ))}
                   </div>
@@ -575,7 +601,7 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
               title="Pausar Rolagem Automática"
             >
               <Pause className="w-4 h-4 fill-rose-500 text-rose-500 shrink-0" />
-              <span className="font-bold text-xs whitespace-nowrap">Pausar Rolagem</span>
+              <span className="font-bold text-xs whitespace-nowrap">Pausar</span>
             </button>
 
             {/* Speed adjustment during scroll */}

@@ -93,16 +93,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* Import Cifra Club Link Form */}
+          {/* Import Cifra Club Link or Search Form */}
           <div className="flex-1 max-w-xl flex items-center gap-2">
             <form onSubmit={onAiSearchSubmit} className="flex-1">
               <div className="relative flex items-center">
-                <Globe className="w-4 h-4 absolute left-3.5 text-amber-500 pointer-events-none" />
+                <Search className="w-4 h-4 absolute left-3.5 text-amber-500 pointer-events-none" />
                 <input
                   type="text"
                   value={searchTerm}
                   onChange={(e) => onSearchChange(e.target.value)}
-                  placeholder="Cole o link do Cifra Club..."
+                  placeholder="Buscar cifra (música/artista ou link)..."
                   className={`w-full pl-10 pr-24 py-2 rounded-xl text-sm font-medium border transition-all outline-none ${
                     profile.stageModeDark
                       ? 'bg-zinc-900 border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50'
@@ -117,10 +117,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                       ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-400 cursor-not-allowed'
                       : 'bg-amber-500 text-zinc-950 hover:bg-amber-400 active:scale-95 disabled:opacity-50'
                   }`}
-                  title={isOffline ? 'Importação online indisponível offline' : 'Importar cifra do Cifra Club'}
+                  title={isOffline ? 'Busca online indisponível offline' : 'Buscar ou importar cifra'}
                 >
-                  <Globe className="w-3.5 h-3.5" />
-                  {isAiSearching ? '...' : 'Importar'}
+                  <Search className="w-3.5 h-3.5" />
+                  {isAiSearching ? '...' : 'Buscar'}
                 </button>
               </div>
             </form>

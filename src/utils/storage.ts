@@ -69,16 +69,16 @@ export function trimStorageQuota(): void {
     if (!raw) return;
     const cached: Song[] = JSON.parse(raw);
 
-    // Keep custom songs and songs that are not default popular songs
+    // Keep custom, cifra and modified songs that are not default popular songs
     const filtered = cached.filter((s) => {
-      if (s.id.startsWith('custom_')) return true;
+      if (s.id.startsWith('custom_') || s.id.startsWith('cifra_')) return true;
       const defaultPop = POPULAR_SONGS.find((p) => p.id === s.id);
       if (!defaultPop) return true;
       return s.chordsText !== defaultPop.chordsText || JSON.stringify(s.chordsUsed) !== JSON.stringify(defaultPop.chordsUsed);
     });
 
-    const customOnly = filtered.filter((s) => s.id.startsWith('custom_'));
-    const others = filtered.filter((s) => !s.id.startsWith('custom_')).slice(-5);
+    const customOnly = filtered.filter((s) => s.id.startsWith('custom_') || s.id.startsWith('cifra_'));
+    const others = filtered.filter((s) => !s.id.startsWith('custom_') && !s.id.startsWith('cifra_')).slice(-5);
     const trimmed = [...customOnly, ...others];
 
     localStorage.setItem(OFFLINE_SONGS_KEY, JSON.stringify(trimmed));

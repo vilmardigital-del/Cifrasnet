@@ -78,7 +78,7 @@ export function subscribeToCloudSongs(onSongsUpdated: (songs: Song[]) => void) {
           const data = docSnap.data() as Song;
           if (data && data.id && !deletedIds.includes(data.id)) {
             cloudSongsMap.set(data.id, data);
-            saveCachedSong(data); // Cache in localStorage for offline access
+            saveCachedSong(data, false); // Cache in localStorage for offline access without re-sync loop
           }
         });
 

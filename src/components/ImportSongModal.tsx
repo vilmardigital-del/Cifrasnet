@@ -29,29 +29,20 @@ export const ImportSongModal: React.FC<ImportSongModalProps> = ({
 
   const handleFetchCifraUrl = async (e: React.FormEvent) => {
     e.preventDefault();
-    let targetUrl = cifraUrl.trim();
-    if (!targetUrl) return;
-
-    if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
-      targetUrl = 'https://' + targetUrl;
-    }
-
-    if (!targetUrl.includes('cifraclub.com.br')) {
-      setUrlError('Apenas links do Cifra Club são suportados (ex: https://www.cifraclub.com.br/artista/musica/).');
-      return;
-    }
+    let targetQuery = cifraUrl.trim();
+    if (!targetQuery) return;
 
     setIsFetchingUrl(true);
     setUrlError(null);
 
     let songData: any = null;
 
-    // 1. Primary Attempt: Server / Serverless API
+    // 1. Primary Attempt: Server API
     try {
       const res = await fetch('/api/search-chords', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: targetUrl }),
+        body: JSON.stringify({ query: targetQuery }),
       });
 
       if (res.ok) {
@@ -64,14 +55,16 @@ export const ImportSongModal: React.FC<ImportSongModalProps> = ({
       console.warn('API /api/search-chords failed, trying client fallback...', err);
     }
 
-    // 2. Secondary Attempt: Client-side CORS Proxy Fallback
-    if (!songData) {
+    // 2. Secondary Attempt: Client-side CORS Proxy Fallback for Cifra Club links
+    if (!songData && (targetQuery.includes('cifraclub.com.br') || targetQuery.startsWith('http'))) {
       try {
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+        let cleanLink = targetQuery;
+        if (!cleanLink.startsWith('http')) cleanLink = 'https://' + cleanLink;
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(cleanLink)}`;
         const proxyRes = await fetch(proxyUrl);
         if (proxyRes.ok) {
           const html = await proxyRes.text();
-          const scraped = parseCifraClubHtml(html, targetUrl);
+          const scraped = parseCifraClubHtml(html, cleanLink);
           if (scraped) {
             songData = scraped;
           }
@@ -93,7 +86,7 @@ export const ImportSongModal: React.FC<ImportSongModalProps> = ({
       setCifraUrl('');
       setUrlError(null);
     } else {
-      setUrlError('Não foi possível extrair a cifra desse link. Verifique se o link está correto ou tente colar o texto da cifra manualmente abaixo.');
+      setUrlError('Não foi possível encontrar essa cifra. Verifique o link ou nome digitado.');
     }
 
     setIsFetchingUrl(false);
@@ -153,14 +146,14 @@ export const ImportSongModal: React.FC<ImportSongModalProps> = ({
           }`}>
             <label className="block text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-2 flex items-center gap-1.5">
               <Globe className="w-3.5 h-3.5" />
-              <span>Importar via Link do Cifra Club</span>
+              <span>Buscar Cifra ou Importar Link</span>
             </label>
             <form onSubmit={handleFetchCifraUrl} className="flex gap-2">
               <input
                 type="text"
                 value={cifraUrl}
                 onChange={(e) => setCifraUrl(e.target.value)}
-                placeholder="Cole o link do Cifra Club..."
+                placeholder="Cole o link do Cifra Club ou digite o nome da música..."
                 className={`flex-1 px-3 py-2 rounded-xl text-xs font-medium border outline-none ${
                   stageModeDark ? 'bg-zinc-900 border-zinc-700 text-zinc-100 placeholder-zinc-500' : 'bg-white border-zinc-300 text-zinc-900 placeholder-zinc-400'
                 }`}

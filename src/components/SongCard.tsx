@@ -1,6 +1,6 @@
 import React from 'react';
 import { Song } from '../types';
-import { Heart, ExternalLink, Music, Sparkles, Trash2 } from 'lucide-react';
+import { Heart, ExternalLink, Music, Sparkles, Trash2, Cloud, Wifi } from 'lucide-react';
 
 interface SongCardProps {
   song: Song;
@@ -21,6 +21,8 @@ export const SongCard: React.FC<SongCardProps> = ({
   onDeleteSong,
   stageModeDark,
 }) => {
+  const isCloudAndOffline = song.id.startsWith('cifra_') || song.id.startsWith('custom_');
+
   return (
     <div
       onClick={() => onSelect(song)}
@@ -73,7 +75,7 @@ export const SongCard: React.FC<SongCardProps> = ({
           <span className="truncate">{song.artist}</span>
         </p>
 
-        {/* Tags & Key */}
+        {/* Tags & Key & Storage Badges */}
         <div className="flex flex-wrap items-center gap-1.5 mb-3">
           <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold text-xs border border-amber-500/20">
             Tom: {song.currentKey || song.originalKey}
@@ -88,6 +90,14 @@ export const SongCard: React.FC<SongCardProps> = ({
           <span className="px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-medium text-xs">
             {song.genre}
           </span>
+
+          {isCloudAndOffline && (
+            <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-extrabold text-[10px] border border-emerald-500/20 flex items-center gap-1" title="Salvo na nuvem e disponível offline">
+              <Cloud className="w-3 h-3 shrink-0" />
+              <Wifi className="w-3 h-3 shrink-0" />
+              <span>Nuvem + Offline</span>
+            </span>
+          )}
         </div>
       </div>
 

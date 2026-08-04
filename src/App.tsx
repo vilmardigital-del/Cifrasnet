@@ -72,19 +72,20 @@ export default function App() {
 
   // Filter songs based on search and active tab
   const filteredSongs = songs.filter((song) => {
+    if (!song) return false;
     const matchesSearch =
       !searchTerm ||
-      song.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      song.artist.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      song.genre.toLowerCase().includes(searchTerm.toLowerCase());
+      (song.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (song.artist || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (song.genre || '').toLowerCase().includes(searchTerm.toLowerCase());
 
     if (!matchesSearch) return false;
 
     if (activeTab === 'favorites') {
-      return (profile.favorites || []).includes(song.id);
+      return (profile?.favorites || []).includes(song.id);
     }
     if (activeTab === 'custom') {
-      return (profile.customCreatedSongs || []).some((s) => s.id === song.id);
+      return (profile?.customCreatedSongs || []).some((s) => s.id === song.id);
     }
     return true;
   });
@@ -130,6 +131,7 @@ export default function App() {
     const updatedProfile = addToHistory(song.id);
     setProfile(updatedProfile);
     setSelectedSong(song);
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as any });
   };
 
   // Toggle stage mode
@@ -162,9 +164,10 @@ export default function App() {
           savedOfflineAt: new Date().toISOString(),
         };
 
-        // Cache locally and update state
-        saveCachedSong(generatedSong);
-        setSongs(loadCachedSongs());
+        // Save song permanently (Saves to offline storage and syncs to Firebase Cloud)
+        const { profile: updatedProfile, songs: updatedSongs } = saveCustomSong(generatedSong);
+        setProfile(updatedProfile);
+        setSongs(updatedSongs);
         handleSelectSong(generatedSong);
         setSearchTerm('');
       } else {
@@ -196,7 +199,10 @@ export default function App() {
         onToggleFavorite={handleToggleFavorite}
         onToggleOffline={handleToggleOffline}
         onDeleteSong={handleDeleteSong}
-        onBack={() => setSelectedSong(null)}
+        onBack={() => {
+          setSelectedSong(null);
+          window.scrollTo({ top: 0, left: 0, behavior: 'instant' as any });
+        }}
         onUpdateProfile={setProfile}
         stageModeDark={profile.stageModeDark}
         onToggleStageMode={handleToggleStageMode}

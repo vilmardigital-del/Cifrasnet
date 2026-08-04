@@ -22,7 +22,7 @@ export const ToneSuggestionsModal: React.FC<ToneSuggestionsModalProps> = ({
   const [aiLoading, setAiLoading] = useState(false);
   const [customAiSuggestion, setCustomAiSuggestion] = useState<any>(null);
 
-  const easyKeyResult = getEasyNoBarreKey(song.originalKey);
+  const easyKeyResult = getEasyNoBarreKey(song?.originalKey || 'C');
 
   const handleAiSuggest = async () => {
     if (!vocalRangePrompt.trim()) return;
@@ -32,9 +32,9 @@ export const ToneSuggestionsModal: React.FC<ToneSuggestionsModalProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          songTitle: song.title,
-          artist: song.artist,
-          currentKey: currentKey,
+          songTitle: song?.title || '',
+          artist: song?.artist || '',
+          currentKey: currentKey || 'C',
           vocalRange: vocalRangePrompt,
         }),
       });
@@ -50,9 +50,9 @@ export const ToneSuggestionsModal: React.FC<ToneSuggestionsModalProps> = ({
   };
 
   const calculateOffset = (targetKey: string): number => {
-    const cleanTarget = targetKey.replace(/[^A-G#b]/g, '');
+    const cleanTarget = (targetKey || '').replace(/[^A-G#b]/g, '');
     const targetRoot = cleanTarget.replace(/m$/, '');
-    const currentRoot = currentKey.replace(/m$/, '');
+    const currentRoot = (currentKey || 'C').replace(/m$/, '');
 
     let tIdx = CHROMATIC_SHARPS.indexOf(targetRoot);
     let cIdx = CHROMATIC_SHARPS.indexOf(currentRoot);
