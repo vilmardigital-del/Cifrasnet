@@ -47,6 +47,7 @@ interface ChordViewerProps {
   onDeleteSong: (song: Song) => void;
   onBack: () => void;
   onUpdateProfile: (p: UserProfile) => void;
+  onUpdateSong?: (song: Song) => void;
   stageModeDark: boolean;
   onToggleStageMode: () => void;
 }
@@ -61,11 +62,30 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
   onDeleteSong,
   onBack,
   onUpdateProfile,
+  onUpdateSong,
   stageModeDark,
   onToggleStageMode,
 }) => {
   // Transposition offset in semitones (-12 to +12)
   const [semitones, setSemitones] = useState(0);
+
+  // Song BPM State (Editable)
+  const [songBpm, setSongBpm] = useState<number>(song.recommendedBpm || 120);
+
+  useEffect(() => {
+    setSongBpm(song.recommendedBpm || 120);
+  }, [song.id, song.recommendedBpm]);
+
+  const handleUpdateBpm = (newBpm: number) => {
+    const validBpm = Math.max(30, Math.min(280, newBpm));
+    setSongBpm(validBpm);
+    if (onUpdateSong) {
+      onUpdateSong({
+        ...song,
+        recommendedBpm: validBpm,
+      });
+    }
+  };
 
   // Auto-scroll states
   const [isAutoScrolling, setIsAutoScrolling] = useState(false);
@@ -499,6 +519,54 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
                 </button>
               </div>
 
+              {/* BPM / Ritmo Controls with Direct Typing */}
+              <div className="flex items-center gap-2 border-l border-zinc-200 dark:border-zinc-800 pl-4">
+                <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1">
+                  <Activity className="w-3.5 h-3.5 text-amber-500" />
+                  <span>BPM:</span>
+                </span>
+
+                <button
+                  onClick={() => handleUpdateBpm(songBpm - 5)}
+                  className="px-2 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-amber-500 hover:text-zinc-950 font-bold text-xs transition-colors"
+                  title="-5 BPM"
+                >
+                  -5
+                </button>
+
+                <input
+                  type="number"
+                  min="30"
+                  max="280"
+                  value={songBpm}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    if (!isNaN(val)) {
+                      handleUpdateBpm(val);
+                    }
+                  }}
+                  className="w-16 px-2 py-1 rounded-xl bg-amber-500/10 text-amber-500 font-mono font-black text-xs text-center border border-amber-500/30 focus:border-amber-500 outline-none"
+                  title="Digite o BPM desejado diretamente aqui"
+                />
+
+                <button
+                  onClick={() => handleUpdateBpm(songBpm + 5)}
+                  className="px-2 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-amber-500 hover:text-zinc-950 font-bold text-xs transition-colors"
+                  title="+5 BPM"
+                >
+                  +5
+                </button>
+
+                <button
+                  onClick={() => setShowMetronome(true)}
+                  className="px-3 py-1.5 rounded-xl bg-amber-500 text-zinc-950 hover:bg-amber-400 font-bold text-xs transition-all flex items-center gap-1 shadow-xs ml-1"
+                  title="Abrir metrônomo neste ritmo"
+                >
+                  <Activity className="w-3.5 h-3.5" />
+                  <span>Metrônomo</span>
+                </button>
+              </div>
+
               {/* Quick Badges & Collapse Button */}
               <div className="flex items-center gap-2">
                 {song.capo ? (
@@ -719,7 +787,7 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
 
       {showMetronome && (
         <MetronomeWidget
-          initialBpm={song.recommendedBpm}
+          initialBpm={songBpm}
           initialTimeSignature={song.timeSignature}
           onClose={() => setShowMetronome(false)}
           stageModeDark={stageModeDark}

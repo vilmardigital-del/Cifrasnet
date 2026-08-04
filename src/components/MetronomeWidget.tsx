@@ -173,10 +173,29 @@ export const MetronomeWidget: React.FC<MetronomeWidgetProps> = ({
         </div>
       </div>
 
-      {/* BPM Big Display & Slider */}
+      {/* BPM Big Display & Editable Input */}
       <div className="text-center">
-        <div className="flex items-baseline justify-center gap-2 mb-2">
-          <span className="text-5xl font-black font-mono tracking-tighter text-amber-500">{bpm}</span>
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <input
+            type="number"
+            min="30"
+            max="280"
+            value={bpm}
+            onChange={(e) => {
+              const val = parseInt(e.target.value, 10);
+              if (!isNaN(val)) {
+                handleBpmChange(val);
+              } else {
+                setBpm(0 as any);
+              }
+            }}
+            onBlur={() => {
+              if (!bpm || bpm < 30) handleBpmChange(30);
+              else if (bpm > 280) handleBpmChange(280);
+            }}
+            className="w-32 text-center text-5xl font-black font-mono tracking-tighter text-amber-500 bg-amber-500/10 dark:bg-amber-500/20 rounded-2xl border-2 border-amber-500/30 focus:border-amber-500 outline-none p-1 transition-all"
+            title="Digite o BPM desejado diretamente aqui"
+          />
           <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">BPM</span>
         </div>
 

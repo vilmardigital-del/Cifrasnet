@@ -134,15 +134,19 @@ export function parseCifraClubHtml(html: string, url: string): ScrapedSong | nul
     const bpmMatch =
       html.match(/data-bpm=\"(\d+)\"/i) ||
       html.match(/id=\"cifra_bpm\"[^>]*>(\d+)</i) ||
+      html.match(/class=\"[^\"]*cifra_bpm[^\"]*\"[^>]*>(\d+)</i) ||
       html.match(/class=\"[^\"]*bpm[^\"]*\"[^>]*>(\d+)</i) ||
-      html.match(/\"bpm\":\s*(\d+)/i) ||
-      html.match(/\"tempo\":\s*(\d+)/i) ||
+      html.match(/\"bpm\":\s*\"?(\d+)\"?/i) ||
+      html.match(/\"tempo\":\s*\"?(\d+)\"?/i) ||
+      html.match(/#bpm=(\d+)/i) ||
+      html.match(/bpm:\s*(\d+)/i) ||
+      html.match(/Tempo:\s*(\d+)/i) ||
       html.match(/(\d+)\s*bpm/i) ||
       html.match(/bpm[\s:]+(\d+)/i);
 
     if (bpmMatch && bpmMatch[1]) {
       const parsedBpm = parseInt(bpmMatch[1], 10);
-      if (parsedBpm >= 40 && parsedBpm <= 250) {
+      if (parsedBpm >= 30 && parsedBpm <= 280) {
         recommendedBpm = parsedBpm;
       }
     }

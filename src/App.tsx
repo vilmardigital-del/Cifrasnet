@@ -204,6 +204,12 @@ export default function App() {
           window.scrollTo({ top: 0, left: 0, behavior: 'instant' as any });
         }}
         onUpdateProfile={setProfile}
+        onUpdateSong={(updatedSong) => {
+          const { profile: updatedP, songs: updatedS } = saveCustomSong(updatedSong);
+          setProfile(updatedP);
+          setSongs(updatedS);
+          setSelectedSong(updatedSong);
+        }}
         stageModeDark={profile.stageModeDark}
         onToggleStageMode={handleToggleStageMode}
       />
