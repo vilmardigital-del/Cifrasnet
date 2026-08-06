@@ -96,13 +96,6 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' as any });
   }, [song?.id]);
 
-  // When starting auto scroll, also scroll to top so the song starts from the beginning
-  useEffect(() => {
-    if (isAutoScrolling) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  }, [isAutoScrolling]);
-
   // Screen Wake Lock Engine (Keeps screen awake when chord sheet is open)
   useEffect(() => {
     let isMounted = true;
@@ -183,9 +176,8 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
         document.documentElement.scrollHeight
       ) - window.innerHeight;
 
-      if (targetY >= maxScroll - 5 && maxScroll > 0) {
-        setIsAutoScrolling(false);
-        return;
+      if (maxScroll > 0 && accumulatedScrollRef.current > maxScroll) {
+        accumulatedScrollRef.current = maxScroll;
       }
 
       animationFrameId = requestAnimationFrame(scrollStep);
@@ -211,6 +203,76 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
 
   // Fullscreen state
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Screen Gesture Feedback Toast
+  const [gestureFeedback, setGestureFeedback] = useState<string | null>(null);
+
+  const showGestureFeedback = (msg: string) => {
+    setGestureFeedback(msg);
+    setTimeout(() => {
+      setGestureFeedback(null);
+    }, 1200);
+  };
+
+  /**
+   * Screen Tap Gesture Navigation
+   * - Top 30%: Scroll to top + start/continue auto scroll
+   * - Middle 30%-70%: Scroll back half screen page + start/continue auto scroll
+   * - Bottom 30%: Scroll to end of song + start/continue auto scroll
+   */
+  const handleScreenTap = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+
+    // Ignore interactive controls, buttons, links, inputs, and modals
+    if (
+      target.closest('button') ||
+      target.closest('a') ||
+      target.closest('input') ||
+      target.closest('select') ||
+      target.closest('textarea') ||
+      target.closest('[role="button"]') ||
+      target.closest('.no-gesture')
+    ) {
+      return;
+    }
+
+    let clientY = e.clientY;
+    if ((clientY === undefined || clientY === 0) && e.nativeEvent) {
+      const native = e.nativeEvent as any;
+      if (native.changedTouches?.[0]) {
+        clientY = native.changedTouches[0].clientY;
+      }
+    }
+
+    if (typeof clientY !== 'number') return;
+
+    const screenHeight = window.innerHeight;
+    const topZone = screenHeight * 0.30;
+    const bottomZone = screenHeight * 0.70;
+
+    if (clientY < topZone) {
+      // Top Zone: Scroll to top and start/continue auto scroll
+      accumulatedScrollRef.current = 0;
+      window.scrollTo({ top: 0, behavior: 'instant' as any });
+      setIsAutoScrolling(true);
+      showGestureFeedback('Início & Rolando');
+    } else if (clientY > bottomZone) {
+      // Bottom Zone: Scroll to bottom and start/continue auto scroll
+      const maxY = Math.max(0, Math.max(document.body.scrollHeight, document.documentElement.scrollHeight) - window.innerHeight);
+      accumulatedScrollRef.current = maxY;
+      window.scrollTo({ top: maxY, behavior: 'instant' as any });
+      setIsAutoScrolling(true);
+      showGestureFeedback('Final da Cifra');
+    } else {
+      // Middle Zone: Scroll back half screen and start/continue auto scroll
+      const currentScroll = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+      const newY = Math.max(0, currentScroll - window.innerHeight * 0.5);
+      accumulatedScrollRef.current = newY;
+      window.scrollTo({ top: newY, behavior: 'instant' as any });
+      setIsAutoScrolling(true);
+      showGestureFeedback('Voltar 50% & Rolando');
+    }
+  };
 
   // Modals & Panel Toggles
   const [showOptionsBar, setShowOptionsBar] = useState(false);
@@ -375,9 +437,19 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
   };
 
   return (
-    <div className={`min-h-screen transition-colors duration-200 pb-24 ${
-      stageModeDark ? 'bg-zinc-950 text-zinc-100' : 'bg-amber-50/30 text-zinc-900'
-    }`}>
+    <div 
+      onClick={handleScreenTap}
+      className={`min-h-screen transition-colors duration-200 pb-24 ${
+        stageModeDark ? 'bg-zinc-950 text-zinc-100' : 'bg-amber-50/30 text-zinc-900'
+      }`}
+    >
+      {/* Tap Gesture Feedback Toast */}
+      {gestureFeedback && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-amber-500 text-zinc-950 font-black text-xs shadow-2xl animate-in fade-in zoom-in-95 duration-200 pointer-events-none flex items-center gap-1.5 border border-amber-400">
+          <Sparkles className="w-4 h-4 shrink-0" />
+          <span>{gestureFeedback}</span>
+        </div>
+      )}
       
       {/* Top Navigation Bar (Hidden during auto-scroll) */}
       {!isAutoScrolling && (
@@ -701,11 +773,11 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
         <div className="fixed bottom-6 right-6 z-50 animate-in fade-in zoom-in-95 duration-200">
           <button
             onClick={() => setIsAutoScrolling(false)}
-            className="px-4 py-2.5 rounded-full font-extrabold text-xs shadow-2xl backdrop-blur-md flex items-center gap-2 border border-rose-500/40 bg-rose-600 text-white hover:bg-rose-700 transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-rose-950/30"
+            className="px-3.5 py-2 rounded-full font-extrabold text-xs shadow-lg backdrop-blur-md flex items-center gap-2 border border-amber-500/40 bg-amber-500/20 text-amber-300 hover:bg-amber-500 hover:text-zinc-950 hover:border-amber-400 transition-all cursor-pointer hover:scale-105 active:scale-95 opacity-70 hover:opacity-100"
             title="Pausar Rolagem Automática"
           >
-            <Pause className="w-4 h-4 fill-current shrink-0 animate-pulse" />
-            <span className="tracking-wide">Pausar</span>
+            <Pause className="w-3.5 h-3.5 fill-current shrink-0 animate-pulse" />
+            <span className="tracking-wide">Pausar Rolagem</span>
           </button>
         </div>
       ) : (
