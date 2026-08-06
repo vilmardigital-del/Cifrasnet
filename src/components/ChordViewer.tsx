@@ -87,9 +87,8 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
     }
   };
 
-  // Auto-scroll states
+  // Auto-scroll state
   const [isAutoScrolling, setIsAutoScrolling] = useState(false);
-  const [scrollSpeed, setScrollSpeed] = useState(3); // 1 to 10
   const [fontSize, setFontSize] = useState(18); // px
 
   // Always scroll to top when opening a cifra / song changes
@@ -143,25 +142,59 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
     };
   }, []);
 
-  // Auto-scroll engine using requestAnimationFrame for smooth, continuous scrolling
+  // Auto-scroll engine strictly driven by the Cifra/Metronome BPM with subpixel accumulation
+  const accumulatedScrollRef = useRef(0);
+
   useEffect(() => {
     let animationFrameId: number;
     let lastTime = performance.now();
 
     const scrollStep = (currentTime: number) => {
       if (!isAutoScrolling) return;
-      const deltaTime = (currentTime - lastTime) / 1000;
+      const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1);
       lastTime = currentTime;
 
-      // scrollSpeed (1-10) maps smoothly to pixels per second (e.g. speed 1 = 4px/s, speed 3 = 12px/s)
-      const pxPerSec = scrollSpeed * 4;
-      const distance = pxPerSec * Math.min(deltaTime, 0.1);
-      window.scrollBy(0, distance);
+      // Scroll speed is calculated directly from songBpm
+      // At 120 BPM, base speed is ~28 pixels per second for comfortable reading
+      const activeBpm = songBpm || 120;
+      const pxPerSec = (activeBpm / 120) * 28;
+
+      const distance = pxPerSec * deltaTime;
+      accumulatedScrollRef.current += distance;
+
+      const targetY = Math.round(accumulatedScrollRef.current);
+
+      window.scrollTo({
+        top: targetY,
+        behavior: 'instant' as ScrollBehavior,
+      });
+
+      // Also fallback for containers/document body
+      if (document.documentElement) {
+        document.documentElement.scrollTop = targetY;
+      }
+      if (document.body) {
+        document.body.scrollTop = targetY;
+      }
+
+      // Check if reached bottom of document
+      const maxScroll = Math.max(
+        document.body.scrollHeight,
+        document.documentElement.scrollHeight
+      ) - window.innerHeight;
+
+      if (targetY >= maxScroll - 5 && maxScroll > 0) {
+        setIsAutoScrolling(false);
+        return;
+      }
 
       animationFrameId = requestAnimationFrame(scrollStep);
     };
 
     if (isAutoScrolling) {
+      // Initialize accumulator with current scroll position
+      const currentScroll = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+      accumulatedScrollRef.current = currentScroll;
       lastTime = performance.now();
       animationFrameId = requestAnimationFrame(scrollStep);
     }
@@ -171,7 +204,7 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [isAutoScrolling, scrollSpeed]);
+  }, [isAutoScrolling, songBpm]);
 
   // Chord Simplify Toggle
   const [isSimplified, setIsSimplified] = useState(false);
@@ -237,26 +270,33 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
     const lines = safeText.split('\n');
 
     return lines.map((line, lineIdx) => {
-      // Section Headers like [Intro], [Refrão], [Primeira Parte]
+      if (!line.trim()) {
+        return <div key={lineIdx} className="h-4" />;
+      }
+
+      // Section Headers like [Intro], [Refrão], [Primeira Parte], [Solo]
       if (line.trim().startsWith('[') && line.trim().endsWith(']')) {
         const isSingleChord = /^\[[A-G][b#]?[^\]]*\]$/.test(line.trim());
         if (!isSingleChord) {
+          const sectionTitle = line.trim().slice(1, -1);
           return (
             <div
               key={lineIdx}
-              className="font-bold text-amber-500 text-[1.1em] mt-6 mb-2 font-mono uppercase tracking-wider border-b border-amber-500/20 pb-1"
+              className="mt-7 mb-3 flex items-center gap-2 border-l-4 border-amber-500 pl-3 py-0.5"
             >
-              {line}
+              <span className="font-extrabold text-amber-500 text-[1.1em] tracking-wider uppercase font-mono">
+                {sectionTitle}
+              </span>
             </div>
           );
         }
       }
 
-      // Check if line contains inline brackets like "Eis a [C]canção [G]aqui"
+      // Inline chord lines like "Eis a [C]canção [G]aqui"
       if (line.includes('[') && line.includes(']')) {
         const parts = line.split(/(\[[^\]]+\])/g);
         return (
-          <div key={lineIdx} className="leading-relaxed font-mono whitespace-pre-wrap my-1">
+          <div key={lineIdx} className="leading-loose font-mono whitespace-pre-wrap my-1">
             {parts.map((part, partIdx) => {
               if (part.startsWith('[') && part.endsWith(']')) {
                 const chordName = part.slice(1, -1).trim();
@@ -264,7 +304,8 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
                   <button
                     key={partIdx}
                     onClick={() => setSelectedChordForDiagram(chordName)}
-                    className="inline-block px-1.5 py-0.5 my-0.5 rounded-md font-bold text-amber-500 hover:bg-amber-500/20 hover:scale-105 transition-all cursor-pointer underline decoration-amber-500/50"
+                    className="inline-block whitespace-nowrap mx-0.5 px-2 py-0.5 rounded-lg font-extrabold text-amber-500 bg-amber-500/15 border border-amber-500/30 hover:bg-amber-500 hover:text-zinc-950 transition-all cursor-pointer select-none align-baseline shadow-2xs font-mono text-[0.9em]"
+                    title={`Ver diagrama do acorde ${chordName}`}
                   >
                     {chordName}
                   </button>
@@ -276,14 +317,13 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
         );
       }
 
-      // Plain chord lines
+      // Plain chord lines (e.g., "C     G     Am     F")
       const words = line.trim().split(/\s+/).filter(Boolean);
       const isChordLine =
         words.length > 0 &&
         words.filter((w) => /^([A-G][b#]?(?:m|maj|min|dim|aug|sus[24]?|[0-9]{1,2}|add[0-9]|b[59]|#[59])*(?:\/[A-G][b#]?)?)$/.test(w)).length / words.length >= 0.7;
 
       if (isChordLine) {
-        // Replace words matching chord pattern with clickable buttons while maintaining spacing
         const elements = [];
         let lastIdx = 0;
         const regex = /\b([A-G][b#]?(?:m|maj|min|dim|aug|sus[24]?|[0-9]{1,2}|add[0-9]|b[59]|#[59])*(?:\/[A-G][b#]?)?)\b/g;
@@ -301,7 +341,8 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
             <button
               key={`chord-${start}`}
               onClick={() => setSelectedChordForDiagram(chord)}
-              className="font-bold text-amber-500 hover:text-amber-400 hover:bg-amber-500/20 px-1 rounded transition-all underline decoration-amber-500/30"
+              className="inline-block whitespace-nowrap font-extrabold text-amber-500 hover:text-zinc-950 hover:bg-amber-500 px-1.5 py-0.5 rounded transition-all cursor-pointer select-none underline decoration-amber-500/40 underline-offset-2"
+              title={`Ver diagrama do acorde ${chord}`}
             >
               {chord}
             </button>
@@ -318,7 +359,7 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
         }
 
         return (
-          <div key={lineIdx} className="font-mono font-bold text-amber-500 whitespace-pre-wrap break-words leading-snug my-0.5">
+          <div key={lineIdx} className="font-mono font-bold text-amber-500 whitespace-pre leading-relaxed my-0.5">
             {elements}
           </div>
         );
@@ -326,7 +367,7 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
 
       // Regular Lyric Line
       return (
-        <div key={lineIdx} className="font-sans leading-relaxed whitespace-pre-wrap break-words my-0.5">
+        <div key={lineIdx} className="font-sans leading-relaxed whitespace-pre-wrap my-0.5">
           {line}
         </div>
       );
@@ -343,7 +384,7 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
         <div className={`sticky top-0 z-30 border-b backdrop-blur-md px-4 py-3 animate-in fade-in duration-200 ${
           stageModeDark ? 'bg-zinc-950/90 border-zinc-800' : 'bg-white/90 border-zinc-200 shadow-xs'
         }`}>
-          <div className="max-w-4xl mx-auto flex items-center justify-between gap-2">
+          <div className="w-full px-3 sm:px-6 flex items-center justify-between gap-2">
             
             <button
               onClick={onBack}
@@ -462,7 +503,7 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
       )}
 
       {/* Main Chord Workspace */}
-      <div className="max-w-4xl mx-auto px-4 pt-6" ref={scrollContainerRef}>
+      <div className="w-full max-w-full px-3 sm:px-6 pt-6 pb-24" ref={scrollContainerRef}>
         
         {/* Controls & Key Bar */}
         {showOptionsBar && !isAutoScrolling ? (
@@ -644,7 +685,7 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
         {/* Cifra Sheet Body */}
         <div 
           style={{ fontSize: `${fontSize}px` }}
-          className={`p-4 sm:p-8 rounded-2xl sm:rounded-3xl border shadow-md font-mono transition-all overflow-x-auto break-words max-w-full ${
+          className={`p-5 sm:p-8 rounded-3xl border shadow-xl font-mono transition-all overflow-x-auto no-scrollbar max-w-full leading-relaxed ${
             stageModeDark 
               ? 'bg-zinc-900 border-zinc-800 text-zinc-100 shadow-amber-500/5' 
               : 'bg-white border-zinc-200 text-zinc-900'
@@ -658,105 +699,91 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
       {/* Floating Auto-Scroll Controls / Hidden Header & Options when Auto-Scrolling */}
       {isAutoScrolling ? (
         <div className="fixed bottom-6 right-6 z-50 animate-in fade-in zoom-in-95 duration-200">
-          <div className={`px-3.5 py-2 rounded-full font-bold text-xs shadow-2xl backdrop-blur-md flex items-center gap-2.5 border transition-all ${
-            stageModeDark
-              ? 'bg-zinc-950/50 hover:bg-zinc-950/80 border-white/20 text-zinc-100'
-              : 'bg-white/60 hover:bg-white/90 border-zinc-900/20 text-zinc-900'
-          }`}>
-            <button
-              onClick={() => setIsAutoScrolling(false)}
-              className="flex items-center gap-1.5 hover:text-rose-500 transition-colors cursor-pointer"
-              title="Pausar Rolagem Automática"
-            >
-              <Pause className="w-4 h-4 fill-rose-500 text-rose-500 shrink-0" />
-              <span className="font-bold text-xs whitespace-nowrap">Pausar</span>
-            </button>
-
-            {/* Speed adjustment during scroll */}
-            <div className="flex items-center gap-1 border-l border-current/20 pl-2">
-              <button
-                onClick={() => setScrollSpeed((prev) => Math.max(1, prev - 1))}
-                className="w-5 h-5 rounded-full hover:bg-current/10 flex items-center justify-center font-extrabold text-[11px] transition-colors"
-                title="Diminuir Velocidade"
-              >
-                -
-              </button>
-
-              <span className="text-[11px] font-mono font-extrabold text-amber-500 min-w-[16px] text-center">
-                {scrollSpeed}
-              </span>
-
-              <button
-                onClick={() => setScrollSpeed((prev) => Math.min(10, prev + 1))}
-                className="w-5 h-5 rounded-full hover:bg-current/10 flex items-center justify-center font-extrabold text-[11px] transition-colors"
-                title="Aumentar Velocidade"
-              >
-                +
-              </button>
-            </div>
-          </div>
+          <button
+            onClick={() => setIsAutoScrolling(false)}
+            className="px-4 py-2.5 rounded-full font-extrabold text-xs shadow-2xl backdrop-blur-md flex items-center gap-2 border border-rose-500/40 bg-rose-600 text-white hover:bg-rose-700 transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-rose-950/30"
+            title="Pausar Rolagem Automática"
+          >
+            <Pause className="w-4 h-4 fill-current shrink-0 animate-pulse" />
+            <span className="tracking-wide">Pausar</span>
+          </button>
         </div>
       ) : (
-        <div className={`fixed bottom-3 left-1/2 -translate-x-1/2 z-40 px-3 py-1.5 rounded-xl border shadow-lg backdrop-blur-md flex items-center gap-2.5 transition-all max-w-md ${
-          stageModeDark ? 'bg-zinc-900/95 border-zinc-800 text-zinc-100' : 'bg-white/95 border-zinc-200 text-zinc-900'
-        }`}>
-          {/* Play / Pause AutoScroll */}
+        <div 
+          className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-2xl border shadow-2xl backdrop-blur-md flex items-center gap-2 sm:gap-3 transition-all duration-300 w-auto max-w-[calc(100vw-1.5rem)] sm:max-w-max overflow-x-auto no-scrollbar shrink-0 whitespace-nowrap ${
+            stageModeDark
+              ? 'bg-zinc-900/95 border-zinc-800 text-zinc-100'
+              : 'bg-white/95 border-zinc-200 text-zinc-900'
+          }`}
+        >
+          {/* Play AutoScroll */}
           <button
             onClick={() => {
               setIsAutoScrolling(true);
-              setShowOptionsBar(false);
             }}
-            className="px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition-all shrink-0 bg-amber-500 text-zinc-950 hover:bg-amber-400 shadow-xs"
-            title="Iniciar Rolagem Automática"
+            className="px-3.5 py-1.5 rounded-xl font-extrabold text-xs flex items-center gap-1.5 transition-all shrink-0 bg-amber-500 text-zinc-950 hover:bg-amber-400 shadow-xs cursor-pointer"
+            title={`Iniciar Rolagem Automática em ${songBpm} BPM`}
           >
-            <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+            <Play className="w-3.5 h-3.5 fill-current shrink-0" />
             <span>Rolagem</span>
           </button>
 
-          {/* Scroll Speed Adjust */}
-          <div className="flex items-center gap-0.5 border-l border-zinc-200 dark:border-zinc-800 pl-1.5">
-            <span className="text-[10px] font-bold text-zinc-400 uppercase mr-1">Vel:</span>
+          {/* BPM Speed Adjustment (-5 / +5) */}
+          <div className="flex items-center gap-1 border-l border-zinc-500/20 pl-2 shrink-0">
             <button
-              onClick={() => setScrollSpeed((prev) => Math.max(1, prev - 1))}
-              className="px-1.5 py-0.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-extrabold text-[11px] transition-colors"
-              title="Diminuir Velocidade"
+              onClick={() => handleUpdateBpm(songBpm - 5)}
+              className="px-1.5 py-1 rounded-lg hover:bg-zinc-500/20 text-[11px] font-bold text-zinc-400 hover:text-amber-500 transition-colors cursor-pointer"
+              title="Diminuir velocidade (-5 BPM)"
             >
-              -
+              -5
             </button>
 
-            <span className="text-[10px] font-mono font-bold text-amber-500 min-w-[20px] text-center" title="Velocidade atual">
-              {scrollSpeed}
-            </span>
+            <div className="flex items-center gap-1 px-1 text-xs font-mono font-bold text-amber-500 min-w-[58px] justify-center">
+              <Activity className="w-3.5 h-3.5 animate-pulse text-amber-500 shrink-0" />
+              <span>{songBpm}</span>
+              <span className="text-[10px] opacity-75">BPM</span>
+            </div>
 
             <button
-              onClick={() => setScrollSpeed((prev) => Math.min(10, prev + 1))}
-              className="px-1.5 py-0.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-extrabold text-[11px] transition-colors"
-              title="Aumentar Velocidade"
+              onClick={() => handleUpdateBpm(songBpm + 5)}
+              className="px-1.5 py-1 rounded-lg hover:bg-zinc-500/20 text-[11px] font-bold text-zinc-400 hover:text-amber-500 transition-colors cursor-pointer"
+              title="Aumentar velocidade (+5 BPM)"
             >
-              +
+              +5
             </button>
           </div>
 
-          {/* Font Size Adjust */}
-          <div className="flex items-center gap-1 border-l border-zinc-200 dark:border-zinc-800 pl-1.5">
+          {/* Font Size Adjust (A- / A+) */}
+          <div className="flex items-center gap-1 border-l border-zinc-500/20 pl-2 shrink-0">
             <button
-              onClick={() => setFontSize((prev) => Math.max(14, prev - 2))}
-              className="px-1.5 py-0.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 font-extrabold text-[11px] transition-colors"
+              onClick={() => setFontSize((prev) => Math.max(12, prev - 2))}
+              className="px-2 py-1 rounded-lg hover:bg-zinc-500/20 font-extrabold text-[11px] text-zinc-400 hover:text-amber-500 transition-colors cursor-pointer"
               title="Diminuir Fonte da Letra"
             >
               A-
             </button>
 
-            <span className="text-[10px] font-mono font-bold text-amber-500 min-w-[24px] text-center" title="Tamanho da fonte">
+            <span className="text-[11px] font-mono font-bold min-w-[28px] text-center text-amber-500/90" title="Tamanho da fonte">
               {fontSize}px
             </span>
 
             <button
-              onClick={() => setFontSize((prev) => Math.min(38, prev + 2))}
-              className="px-1.5 py-0.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 font-extrabold text-[11px] transition-colors"
+              onClick={() => setFontSize((prev) => Math.min(42, prev + 2))}
+              className="px-2 py-1 rounded-lg hover:bg-zinc-500/20 font-extrabold text-[11px] text-zinc-400 hover:text-amber-500 transition-colors cursor-pointer"
               title="Aumentar Fonte da Letra"
             >
               A+
+            </button>
+          </div>
+
+          {/* Scroll to Top Button */}
+          <div className="border-l border-zinc-500/20 pl-2 shrink-0">
+            <button
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-amber-500 hover:bg-zinc-500/20 transition-colors cursor-pointer"
+              title="Voltar ao Topo da Cifra"
+            >
+              <ChevronUp className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -789,6 +816,7 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
         <MetronomeWidget
           initialBpm={songBpm}
           initialTimeSignature={song.timeSignature}
+          onBpmChange={(newBpm) => handleUpdateBpm(newBpm)}
           onClose={() => setShowMetronome(false)}
           stageModeDark={stageModeDark}
         />

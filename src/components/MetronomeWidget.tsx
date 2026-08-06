@@ -18,6 +18,7 @@ import { SoundType } from '../types';
 interface MetronomeWidgetProps {
   initialBpm?: number;
   initialTimeSignature?: string;
+  onBpmChange?: (newBpm: number) => void;
   onClose?: () => void;
   stageModeDark: boolean;
   isFloatingOverlay?: boolean;
@@ -27,6 +28,7 @@ interface MetronomeWidgetProps {
 export const MetronomeWidget: React.FC<MetronomeWidgetProps> = ({
   initialBpm = 120,
   initialTimeSignature = '4/4',
+  onBpmChange,
   onClose,
   stageModeDark,
   isFloatingOverlay = false,
@@ -70,7 +72,10 @@ export const MetronomeWidget: React.FC<MetronomeWidgetProps> = ({
     if (engineRef.current) {
       engineRef.current.setBpm(bpm);
     }
-  }, [bpm]);
+    if (onBpmChange && bpm >= 30) {
+      onBpmChange(bpm);
+    }
+  }, [bpm, onBpmChange]);
 
   useEffect(() => {
     if (engineRef.current) {

@@ -7,7 +7,7 @@ const OFFLINE_SONGS_KEY = 'ciframaster_cached_songs_v1';
 const DELETED_SONGS_KEY = 'ciframaster_deleted_songs_v1';
 
 const DEFAULT_PROFILE: UserProfile = {
-  name: 'Músico CifraMaster',
+  name: 'Vilmar',
   preferredInstrument: 'Violão / Guitarra',
   stageModeDark: false,
   favorites: ['anunciacao-alceu-valenca', 'evidencias-chitaozinho-xororo'],

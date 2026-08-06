@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { User as FirebaseUser, onAuthStateChanged } from 'firebase/auth';
+import { auth } from './lib/firebase';
 import { Song, UserProfile } from './types';
 import { 
   loadUserProfile, 
@@ -20,6 +22,7 @@ import { MetronomeWidget } from './components/MetronomeWidget';
 import { ProfileModal } from './components/ProfileModal';
 import { ImportSongModal } from './components/ImportSongModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
+import { LoginModal } from './components/LoginModal';
 import { Music, Sparkles, WifiOff, AlertCircle, RefreshCw } from 'lucide-react';
 
 export default function App() {
@@ -28,6 +31,10 @@ export default function App() {
   const [offlineIds, setOfflineIds] = useState<string[]>(getOfflineSongIds());
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [songToDelete, setSongToDelete] = useState<Song | null>(null);
+
+  // Firebase Auth State
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(auth.currentUser);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   // Search state
   const [searchTerm, setSearchTerm] = useState('');
@@ -52,6 +59,18 @@ export default function App() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
+    // Track Firebase Auth state
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      if (user?.displayName) {
+        setProfile((prev) => {
+          const updated = { ...prev, name: user.displayName || prev.name };
+          saveUserProfile(updated);
+          return updated;
+        });
+      }
+    });
+
     // Subscribe to Firebase Cloud real-time updates for songs & profile
     const unsubscribeSongs = subscribeToCloudSongs((updatedSongs) => {
       setSongs(updatedSongs);
@@ -65,6 +84,7 @@ export default function App() {
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      unsubscribeAuth();
       unsubscribeSongs();
       unsubscribeProfile();
     };
@@ -229,6 +249,8 @@ export default function App() {
         isAiSearching={isAiSearching}
         profile={profile}
         onOpenProfile={() => setShowProfileModal(true)}
+        onOpenLogin={() => setShowLoginModal(true)}
+        currentUser={currentUser}
         onOpenMetronome={() => setShowMetronome(true)}
         onOpenImportModal={() => setShowImportModal(true)}
         onToggleStageMode={handleToggleStageMode}
@@ -351,6 +373,14 @@ export default function App() {
           stageModeDark={profile.stageModeDark}
         />
       )}
+
+      {/* Login / Auth Modal */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        stageModeDark={profile.stageModeDark}
+        onUserAuthenticated={(user) => setCurrentUser(user)}
+      />
 
     </div>
   );

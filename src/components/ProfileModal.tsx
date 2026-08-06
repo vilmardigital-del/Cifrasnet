@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import vilmarLogo from '../assets/images/vilmar_logo_1785980530881.jpg';
 import { 
   X, 
   User, 
@@ -94,8 +95,13 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         {/* Modal Header */}
         <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500 flex items-center justify-center text-zinc-950 font-black text-xl shadow-md shadow-amber-500/20">
-              {profile.name ? profile.name.charAt(0).toUpperCase() : 'M'}
+            <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-500 shadow-md shadow-amber-500/20 shrink-0 bg-zinc-900">
+              <img 
+                src={vilmarLogo} 
+                alt="Vilmar Avatar" 
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
             </div>
             <div>
               <h2 className="text-xl font-extrabold tracking-tight">{profile.name}</h2>
