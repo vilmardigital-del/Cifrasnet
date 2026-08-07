@@ -48,16 +48,27 @@ Responda em JSON válido:
   "capoAlternative": "Você pode usar Capo na 2ª casa no tom de C para soar em D"
 }`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-      },
-    });
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    let lastError = null;
 
-    const data = JSON.parse(response.text || '{}');
-    return res.status(200).json({ success: true, suggestion: data });
+    for (const modelName of modelsToTry) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+          },
+        });
+
+        const data = JSON.parse(response.text || '{}');
+        return res.status(200).json({ success: true, suggestion: data });
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    throw lastError || new Error('Não foi possível gerar sugestão com Gemini.');
   } catch (error: any) {
     console.error('Erro na Vercel API /api/suggest-key:', error);
     return res.status(500).json({ error: error.message || 'Erro ao sugerir tom.' });

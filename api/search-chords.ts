@@ -47,8 +47,7 @@ async function generateSongWithGemini(queryOrUrl: string) {
   const ai = getAiClient();
   if (!ai) return null;
 
-  try {
-    const prompt = `Você é o maior banco de dados e especialista em cifras de músicas brasileiras e internacionais.
+  const prompt = `Você é o maior banco de dados e especialista em cifras de músicas brasileiras e internacionais.
 O usuário solicitou a cifra para: "${queryOrUrl}".
 
 Forneça a cifra COMPLETA, EXATA e PERFEITAMENTE FORMATADA para esta música.
@@ -69,44 +68,50 @@ Responda ESTRITAMENTE em formato JSON com o seguinte esquema:
   "chordsUsed": ["C", "G", "Am", "F"]
 }`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-      },
-    });
+  const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
 
-    const text = response.text;
-    if (!text) return null;
+  for (const modelName of modelsToTry) {
+    try {
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+        },
+      });
 
-    const data = JSON.parse(text);
-    if (!data.title || !data.chordsText) return null;
+      const text = response.text;
+      if (!text) continue;
 
-    const slug = (str: string) => (str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const data = JSON.parse(text);
+      if (!data.title || !data.chordsText) continue;
 
-    const chordsUsed = Array.isArray(data.chordsUsed) && data.chordsUsed.length > 0
-      ? data.chordsUsed
-      : extractChordsFromText(data.chordsText);
+      const slug = (str: string) => (str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-    return {
-      id: 'cifra_' + slug(data.artist) + '_' + slug(data.title) + '_' + Date.now().toString(36),
-      title: data.title,
-      artist: data.artist || 'Artista',
-      originalKey: data.originalKey || 'C',
-      currentKey: data.originalKey || 'C',
-      difficulty: data.difficulty || 'Médio',
-      genre: data.genre || 'Nacional',
-      recommendedBpm: Number(data.recommendedBpm) || 120,
-      chordsText: data.chordsText,
-      chordsUsed,
-      cifraClubUrl: queryOrUrl.includes('cifraclub.com.br') ? queryOrUrl : '',
-      source: 'CifraMaster AI'
-    };
-  } catch (err) {
-    console.error('Gemini song generation error:', err);
-    return null;
+      const chordsUsed = Array.isArray(data.chordsUsed) && data.chordsUsed.length > 0
+        ? data.chordsUsed
+        : extractChordsFromText(data.chordsText);
+
+      return {
+        id: 'cifra_' + slug(data.artist) + '_' + slug(data.title) + '_' + Date.now().toString(36),
+        title: data.title,
+        artist: data.artist || 'Artista',
+        originalKey: data.originalKey || 'C',
+        currentKey: data.originalKey || 'C',
+        difficulty: data.difficulty || 'Médio',
+        genre: data.genre || 'Nacional',
+        recommendedBpm: Number(data.recommendedBpm) || 120,
+        chordsText: data.chordsText,
+        chordsUsed,
+        cifraClubUrl: queryOrUrl.includes('cifraclub.com.br') ? queryOrUrl : '',
+        source: 'CifraMaster AI'
+      };
+    } catch (err) {
+      console.warn(`Gemini model ${modelName} failed, trying next...`, err);
+    }
   }
+
+  return null;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

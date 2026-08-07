@@ -37,6 +37,8 @@ export const ImportSongModal: React.FC<ImportSongModalProps> = ({
 
     let songData: any = null;
 
+    let serverErrorMessage = '';
+
     // 1. Primary Attempt: Server API
     try {
       const res = await fetch('/api/search-chords', {
@@ -45,14 +47,15 @@ export const ImportSongModal: React.FC<ImportSongModalProps> = ({
         body: JSON.stringify({ query: targetQuery }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.song) {
-          songData = data.song;
-        }
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success && data.song) {
+        songData = data.song;
+      } else {
+        serverErrorMessage = data.error || `Erro HTTP ${res.status}`;
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('API /api/search-chords failed, trying client fallback...', err);
+      serverErrorMessage = err.message || 'Falha ao conectar com o servidor.';
     }
 
     // 2. Secondary Attempt: Client-side CORS Proxy Fallback for Cifra Club links
@@ -60,13 +63,25 @@ export const ImportSongModal: React.FC<ImportSongModalProps> = ({
       try {
         let cleanLink = targetQuery;
         if (!cleanLink.startsWith('http')) cleanLink = 'https://' + cleanLink;
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(cleanLink)}`;
-        const proxyRes = await fetch(proxyUrl);
-        if (proxyRes.ok) {
-          const html = await proxyRes.text();
-          const scraped = parseCifraClubHtml(html, cleanLink);
-          if (scraped) {
-            songData = scraped;
+        
+        const proxies = [
+          `https://api.allorigins.win/raw?url=${encodeURIComponent(cleanLink)}`,
+          `https://corsproxy.io/?${encodeURIComponent(cleanLink)}`,
+        ];
+
+        for (const proxyUrl of proxies) {
+          try {
+            const proxyRes = await fetch(proxyUrl);
+            if (proxyRes.ok) {
+              const html = await proxyRes.text();
+              const scraped = parseCifraClubHtml(html, cleanLink);
+              if (scraped && scraped.chordsText && scraped.chordsText.length > 20) {
+                songData = scraped;
+                break;
+              }
+            }
+          } catch (e) {
+            console.warn('Proxy failed:', proxyUrl, e);
           }
         }
       } catch (proxyErr) {
@@ -86,7 +101,12 @@ export const ImportSongModal: React.FC<ImportSongModalProps> = ({
       setCifraUrl('');
       setUrlError(null);
     } else {
-      setUrlError('Não foi possível encontrar essa cifra. Verifique o link ou nome digitado.');
+      const isUrl = targetQuery.includes('cifraclub.com.br') || targetQuery.startsWith('http');
+      if (!isUrl && serverErrorMessage.includes('GEMINI_API_KEY')) {
+        setUrlError('Configure a chave GEMINI_API_KEY nas variáveis de ambiente do seu projeto Vercel para liberar a busca de cifras por IA, ou cole o link direto do Cifra Club.');
+      } else {
+        setUrlError(serverErrorMessage || 'Não foi possível encontrar essa cifra. Verifique o link ou nome digitado.');
+      }
     }
 
     setIsFetchingUrl(false);
