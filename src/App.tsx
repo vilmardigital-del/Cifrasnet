@@ -23,6 +23,7 @@ import { ProfileModal } from './components/ProfileModal';
 import { ImportSongModal } from './components/ImportSongModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { LoginModal } from './components/LoginModal';
+import { parseCifraClubHtml, slugify } from './utils/cifraClubScraper';
 import { Music, Sparkles, WifiOff, AlertCircle, RefreshCw } from 'lucide-react';
 
 export default function App() {
@@ -161,43 +162,116 @@ export default function App() {
     setProfile(updated);
   };
 
-  // Submit chord search request directly to Cifra Club
+  // Submit chord search request directly to Cifra Club or Gemini AI
   const handleAiSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchTerm.trim() || isOffline) return;
+    const query = searchTerm.trim();
+    if (!query || isOffline) return;
 
     setIsAiSearching(true);
     setAiError(null);
 
+    let songData: Song | null = null;
+    let errorMessage = '';
+
+    // 1. Primary Attempt: Server API
     try {
       const res = await fetch('/api/search-chords', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: searchTerm }),
+        body: JSON.stringify({ query }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
-      if (data.success && data.song) {
-        const generatedSong: Song = {
-          ...data.song,
-          savedOfflineAt: new Date().toISOString(),
-        };
-
-        // Save song permanently (Saves to offline storage and syncs to Firebase Cloud)
-        const { profile: updatedProfile, songs: updatedSongs } = saveCustomSong(generatedSong);
-        setProfile(updatedProfile);
-        setSongs(updatedSongs);
-        handleSelectSong(generatedSong);
-        setSearchTerm('');
+      if (res.ok && data.success && data.song) {
+        songData = data.song;
       } else {
-        setAiError(data.error || 'Não foi possível encontrar essa cifra no Cifra Club. Verifique o nome ou cole o link.');
+        errorMessage = data.error || `Erro HTTP ${res.status}`;
       }
     } catch (err: any) {
-      setAiError('Erro de conexão ao buscar no Cifra Club. Verifique sua rede.');
-    } finally {
-      setIsAiSearching(false);
+      console.warn('Backend API search error, switching to client fallback:', err);
+      errorMessage = err.message || 'Falha na conexão com o servidor.';
     }
+
+    // 2. Client-side Fallback using CORS Proxies for Cifra Club links or candidate slugs
+    if (!songData) {
+      let candidateUrls: string[] = [];
+
+      if (query.includes('cifraclub.com.br') || query.startsWith('http')) {
+        let clean = query;
+        if (!clean.startsWith('http')) clean = 'https://' + clean;
+        candidateUrls.push(clean);
+      } else {
+        const parts = query.split(/[-–—]/).map(s => s.trim());
+        if (parts.length >= 2) {
+          const s1 = slugify(parts[0]);
+          const s2 = slugify(parts[1]);
+          if (s1 && s2) {
+            candidateUrls.push(`https://www.cifraclub.com.br/${s1}/${s2}/`);
+            candidateUrls.push(`https://www.cifraclub.com.br/${s2}/${s1}/`);
+          }
+        } else {
+          const words = query.split(/\s+/).filter(Boolean);
+          if (words.length >= 2) {
+            const sAll = slugify(query);
+            candidateUrls.push(`https://www.cifraclub.com.br/${sAll}/`);
+          }
+        }
+      }
+
+      for (const targetUrl of candidateUrls) {
+        const proxies = [
+          `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+          `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+        ];
+
+        for (const proxyUrl of proxies) {
+          try {
+            const proxyRes = await fetch(proxyUrl);
+            if (proxyRes.ok) {
+              const html = await proxyRes.text();
+              const scraped = parseCifraClubHtml(html, targetUrl);
+              if (scraped && scraped.chordsText && scraped.chordsText.length > 20) {
+                songData = {
+                  ...scraped,
+                  difficulty: (scraped.difficulty || 'Médio') as any,
+                  timeSignature: '4/4',
+                  savedOfflineAt: new Date().toISOString(),
+                } as Song;
+                break;
+              }
+            }
+          } catch (e) {
+            console.warn('Client proxy search error:', proxyUrl, e);
+          }
+        }
+        if (songData) break;
+      }
+    }
+
+    if (songData) {
+      const generatedSong: Song = {
+        ...songData,
+        savedOfflineAt: new Date().toISOString(),
+      };
+
+      // Save song permanently (Saves to offline storage and syncs to Firebase Cloud)
+      const { profile: updatedProfile, songs: updatedSongs } = saveCustomSong(generatedSong);
+      setProfile(updatedProfile);
+      setSongs(updatedSongs);
+      handleSelectSong(generatedSong);
+      setSearchTerm('');
+    } else {
+      const isUrl = query.includes('cifraclub.com.br') || query.startsWith('http');
+      if (!isUrl && errorMessage.includes('GEMINI_API_KEY')) {
+        setAiError('Para buscar cifras por nome via IA no Vercel, defina GEMINI_API_KEY nas variáveis de ambiente da Vercel, ou cole o link direto da música no Cifra Club.');
+      } else {
+        setAiError(errorMessage || 'Não foi possível carregar essa cifra. Verifique o link ou nome digitado.');
+      }
+    }
+
+    setIsAiSearching(false);
   };
 
   // Save imported / custom song

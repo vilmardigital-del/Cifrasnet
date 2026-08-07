@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
-import { parseCifraClubHtml } from './src/utils/cifraClubScraper';
+import { parseCifraClubHtml, slugify } from './src/utils/cifraClubScraper';
 import { extractChordsFromText } from './src/utils/chordTransposer';
 
 dotenv.config();
@@ -32,12 +32,13 @@ const getAiClient = () => {
 };
 
 async function scrapeCifraClubUrl(url: string) {
-  try {
-    let targetUrl = url.trim();
-    if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
-      targetUrl = 'https://' + targetUrl;
-    }
+  let targetUrl = url.trim();
+  if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+    targetUrl = 'https://' + targetUrl;
+  }
 
+  // 1. Direct fetch
+  try {
     const res = await fetch(targetUrl, {
       redirect: 'follow',
       headers: {
@@ -48,13 +49,39 @@ async function scrapeCifraClubUrl(url: string) {
       },
     });
 
-    if (!res.ok) return null;
-    const html = await res.text();
-    return parseCifraClubHtml(html, targetUrl);
+    if (res.ok) {
+      const html = await res.text();
+      const parsed = parseCifraClubHtml(html, targetUrl);
+      if (parsed && parsed.chordsText && parsed.chordsText.length > 20) {
+        return parsed;
+      }
+    }
   } catch (e) {
-    console.error('Scrape Cifra Club Error:', e);
-    return null;
+    console.warn('Direct fetch to Cifra Club failed:', e);
   }
+
+  // 2. Proxy fetch fallback
+  const proxies = [
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+    `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+  ];
+
+  for (const proxyUrl of proxies) {
+    try {
+      const res = await fetch(proxyUrl);
+      if (res.ok) {
+        const html = await res.text();
+        const parsed = parseCifraClubHtml(html, targetUrl);
+        if (parsed && parsed.chordsText && parsed.chordsText.length > 20) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Proxy fetch failed:', proxyUrl, e);
+    }
+  }
+
+  return null;
 }
 
 async function generateSongWithGemini(queryOrUrl: string) {
@@ -156,6 +183,37 @@ app.post('/api/search-chords', async (req, res) => {
           song: scraped,
           source: 'Cifra Club (Oficial)'
         });
+      }
+    } else {
+      // Try constructing Cifra Club URL from title/artist query
+      const parts = input.split(/[-–—]/).map(s => s.trim());
+      let candidateUrls: string[] = [];
+
+      if (parts.length >= 2) {
+        const s1 = slugify(parts[0]);
+        const s2 = slugify(parts[1]);
+        if (s1 && s2) {
+          candidateUrls.push(`https://www.cifraclub.com.br/${s1}/${s2}/`);
+          candidateUrls.push(`https://www.cifraclub.com.br/${s2}/${s1}/`);
+        }
+      } else {
+        const words = input.split(/\s+/).filter(Boolean);
+        if (words.length >= 2) {
+          const sAll = slugify(input);
+          candidateUrls.push(`https://www.cifraclub.com.br/${sAll}/`);
+        }
+      }
+
+      for (const candidateUrl of candidateUrls) {
+        const scraped = await scrapeCifraClubUrl(candidateUrl);
+        if (scraped && scraped.chordsText && scraped.chordsText.length > 30) {
+          console.log(`Cifra extraída via URL candidata: ${scraped.artist} - ${scraped.title}`);
+          return res.json({
+            success: true,
+            song: scraped,
+            source: 'Cifra Club (Oficial)'
+          });
+        }
       }
     }
 
